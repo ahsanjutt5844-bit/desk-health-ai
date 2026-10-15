@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTheme } from '../lib/theme.jsx';
 
 export function StatCard({ icon, label, value, tone = 'text-mute-200', sub }) {
   return (
@@ -58,6 +59,7 @@ export function SettingRow({ title, desc, children }) {
 }
 
 export function SliderRow({ title, desc, value, min, max, step = 1, unit, onChange, format }) {
+  const { c } = useTheme();
   return (
     <div className="border-b border-ink-700 py-4 last:border-0">
       <div className="flex items-center justify-between">
@@ -69,7 +71,7 @@ export function SliderRow({ title, desc, value, min, max, step = 1, unit, onChan
         type="range" min={min} max={max} step={step} value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="mt-3 w-full"
-        style={{ background: `linear-gradient(to right, #12e2a3 ${((value - min) / (max - min)) * 100}%, #223040 0)` }}
+        style={{ background: `linear-gradient(to right, ${c('good')} ${((value - min) / (max - min)) * 100}%, ${c('ink-700')} 0)` }}
       />
       <div className="mt-1 flex justify-between font-mono text-[10px] text-mute-400">
         <span>{format ? format(min) : `${min}${unit}`}</span>

@@ -32,7 +32,7 @@ function createWindow() {
     height: 800,
     minWidth: 980,
     minHeight: 640,
-    backgroundColor: '#0b1016',
+    backgroundColor: '#f1f4f7',
     title: 'DeskHealth AI',
     icon: ICON,
     autoHideMenuBar: true,

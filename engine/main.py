@@ -75,6 +75,9 @@ class Engine:
         self.last_result = None
         self.last_distance = None
         self.camera_error = None
+        self.reconnecting = False
+        self.failed_opens = 0
+        self.failed_reads = 0
         self.dark_notified = 0.0
 
     # ----------------------------------------------------------- helpers
@@ -146,6 +149,13 @@ class Engine:
                 self.paused_reasons.discard(reason)
             else:
                 self.paused_reasons.clear()
+            if not self.paused:
+                # reopen right away; old errors are stale after a pause
+                self.camera_error = None
+                self.last_result = None
+                self.last_camera_try = 0.0
+                self.failed_opens = 0
+                self.reconnecting = True
             self.emit_status()
             return True
         if cmd == "snooze":
@@ -193,6 +203,8 @@ class Engine:
         r = self.last_result
         if self.paused:
             state = "Paused"
+        elif self.reconnecting and not self.camera_error:
+            state = "Starting"
         elif self.camera_error:
             state = "NoCamera"
         elif self.calibrating is not None:
@@ -270,9 +282,20 @@ class Engine:
         self.last_camera_try = now
         if self.vision.start_stream():
             self.camera_error = None
+            self.reconnecting = False
+            self.failed_opens = 0
+            self.failed_reads = 0
             self._start_session()
             log(f"camera {self.vision.camera_idx} opened")
+            self.emit_status()
             return True
+        self.failed_opens += 1
+        log(f"camera open attempt {self.failed_opens} failed: {self.vision.last_error}", "warn")
+        # first attempts after start/resume often fail while the driver frees the
+        # device - keep showing "starting" and only report an error if it persists
+        if self.failed_opens < 3:
+            return False
+        self.reconnecting = False
         if self.camera_error != "unavailable":
             self.camera_error = "unavailable"
             emit({"type": "camera_error", "msg": "Camera disconnected or in use"})
@@ -282,6 +305,12 @@ class Engine:
     def process_once(self):
         frame = self.vision.read()
         if frame is None:
+            # a single dropped frame is normal on Windows webcams; only treat
+            # several in a row as a disconnect
+            self.failed_reads += 1
+            if self.failed_reads < 5:
+                return
+            self.failed_reads = 0
             self.vision.pause_stream()
             self.camera_error = "disconnected"
             self.last_result = None
@@ -290,6 +319,7 @@ class Engine:
             self.emit_status()
             return
 
+        self.failed_reads = 0
         analysis = self.vision.process_frame(frame)
         now = time.time()
         dt = min(now - self.last_tick, 3.0) if self.last_tick else 0.0

@@ -17,7 +17,7 @@ export function Sidebar({ page, setPage }) {
     <aside className="flex w-[240px] shrink-0 flex-col border-r border-ink-700 bg-ink-900">
       <div className="px-6 pb-5 pt-7">
         <div className="whitespace-nowrap font-display text-[19px] font-extrabold tracking-tight">
-          <span className="text-good">Desk</span><span className="text-white">Health</span>
+          <span className="text-good">Desk</span><span className="text-head">Health</span>
           <span className="ml-1 font-sans text-base font-medium text-mute-400">AI</span>
         </div>
         <div className="mt-1 text-[9.5px] font-semibold uppercase tracking-[0.2em] text-mute-400">Posture & eye strain monitor</div>
@@ -67,7 +67,7 @@ export function TopBar({ title }) {
   const session = paused ? 0 : (Date.now() - sessionStart.current) / 1000;
   return (
     <header className="flex h-[76px] shrink-0 items-center justify-between border-b border-ink-700 bg-ink-900/80 px-8 backdrop-blur">
-      <h1 className="font-display text-[22px] font-extrabold text-white">{title}</h1>
+      <h1 className="font-display text-[22px] font-extrabold text-head">{title}</h1>
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-6 rounded-xl border border-ink-700 bg-ink-850 px-5 py-2">
           <span className={`h-1.5 w-1.5 rounded-full ${paused ? 'bg-mute-400' : 'bg-bad pulse-dot'}`} />

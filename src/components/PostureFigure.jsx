@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTheme } from '../lib/theme.jsx';
 
 // Side-view figure that mirrors the live measurements:
 //   trunk lean  <- shoulder_angle      thoracic curve <- kyphosis
@@ -49,23 +50,24 @@ export default function PostureFigure({ posture, state }) {
     pelvic: p.pelvic_tilt || 0,
   });
   const ideal = figure({});
-  const color = { Slouching: '#ff3d5e', Resting: '#ffb020', Healthy: '#12e2a3' }[state] || '#7d8a99';
+  const { c } = useTheme();
+  const color = c({ Slouching: 'bad', Resting: 'warn', Healthy: 'good' }[state] || 'mute-400');
   return (
     <svg viewBox="18 34 228 186" className="h-full w-full">
       {/* chair */}
-      <g stroke="#223040" strokeWidth="6" strokeLinecap="round" fill="none">
+      <g stroke={c('ink-600')} strokeWidth="6" strokeLinecap="round" fill="none">
         <line x1="40" y1="186" x2="110" y2="186" />
         <line x1="44" y1="186" x2="36" y2="96" />
         <line x1="76" y1="190" x2="76" y2="214" />
       </g>
       {/* desk + monitor */}
-      <g stroke="#2e3d4e" strokeLinecap="round" fill="none">
+      <g stroke={c('ink-500')} strokeLinecap="round" fill="none">
         <line x1="150" y1="150" x2="236" y2="150" strokeWidth="5" />
         <line x1="222" y1="150" x2="222" y2="214" strokeWidth="5" />
-        <rect x="210" y="78" width="10" height="56" rx="3" strokeWidth="4" fill="#111922" />
+        <rect x="210" y="78" width="10" height="56" rx="3" strokeWidth="4" fill={c('ink-800')} />
         <line x1="215" y1="134" x2="215" y2="150" strokeWidth="4" />
       </g>
-      <Body f={ideal} stroke="#9aa6b4" dashed />
+      <Body f={ideal} stroke={c('mute-400')} dashed />
       <Body f={live} stroke={color} />
     </svg>
   );

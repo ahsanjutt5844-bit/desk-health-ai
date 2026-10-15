@@ -10,11 +10,14 @@ import '@fontsource/jetbrains-mono/700.css';
 import './index.css';
 import App from './App.jsx';
 import { EngineProvider } from './lib/engine.jsx';
+import { ThemeProvider } from './lib/theme.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <EngineProvider>
-      <App />
-    </EngineProvider>
+    <ThemeProvider>
+      <EngineProvider>
+        <App />
+      </EngineProvider>
+    </ThemeProvider>
   </React.StrictMode>,
 );

@@ -2,26 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light theme (default). "ink" = surfaces & borders, "mute" = text, from
+   faint to strong. Values are RGB triplets so Tailwind can add opacity. */
+:root {
+  --ink-950: 241 244 247;   /* page background */
+  --ink-900: 248 250 251;   /* sidebar, insets */
+  --ink-850: 255 255 255;   /* cards */
+  --ink-800: 242 245 248;   /* buttons, chips */
+  --ink-700: 226 232 238;   /* borders, tracks */
+  --ink-600: 205 214 222;   /* strong borders */
+  --ink-500: 176 188 199;
+  --mute-400: 104 117 131;
+  --mute-300: 74 86 99;
+  --mute-200: 31 41 51;
+  --head: 14 22 32;
+  --good: 8 150 107;
+  --bad: 214 45 76;
+  --warn: 196 120 0;
+  --info: 37 105 214;
+  --scrim: 15 23 32;
+  --shadow: 15 23 32;
+  --chart-grid: 233 238 242;
+  color-scheme: light;
+}
+:root.dark {
+  --ink-950: 7 11 16;
+  --ink-900: 11 16 22;
+  --ink-850: 14 20 27;
+  --ink-800: 17 25 34;
+  --ink-700: 24 34 45;
+  --ink-600: 34 48 64;
+  --ink-500: 46 61 78;
+  --mute-400: 125 138 153;
+  --mute-300: 154 166 180;
+  --mute-200: 195 204 214;
+  --head: 255 255 255;
+  --good: 18 226 163;
+  --bad: 255 61 94;
+  --warn: 255 176 32;
+  --info: 79 157 255;
+  --scrim: 0 0 0;
+  --shadow: 0 0 0;
+  --chart-grid: 24 34 45;
+  color-scheme: dark;
+}
+
 html, body, #root { height: 100%; }
 body {
   @apply bg-ink-950 text-mute-200 font-sans antialiased;
   user-select: none;
 }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #223040; border-radius: 8px; border: 2px solid #0b1016; }
+::-webkit-scrollbar-thumb { background: rgb(var(--ink-600)); border-radius: 8px; border: 2px solid rgb(var(--ink-950)); }
 ::-webkit-scrollbar-track { background: transparent; }
 
 @layer components {
-  .card { @apply rounded-2xl border border-ink-700 bg-ink-850; }
+  .card { @apply rounded-2xl border border-ink-700 bg-ink-850 shadow-card; }
   .label { @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-mute-400; }
   .card-title { @apply font-display text-[13px] font-bold uppercase tracking-[0.14em] text-good; }
   .btn { @apply inline-flex items-center gap-2 rounded-xl border border-ink-600 bg-ink-800 px-4 py-2 text-sm font-medium text-mute-200 transition hover:border-ink-500 hover:bg-ink-700 disabled:opacity-40; }
-  .btn-primary { @apply border-good/40 bg-good/15 text-good hover:bg-good/25 hover:border-good/60; }
+  .btn-primary { @apply border-good bg-good text-white hover:brightness-110; }
+  :root.dark .btn-primary { @apply border-good/40 bg-good/15 text-good hover:bg-good/25 hover:border-good/60; }
   .btn-danger { @apply border-bad/40 bg-bad/10 text-bad hover:bg-bad/20; }
 }
 
-input[type='range'] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 999px; background: #223040; outline: none; }
-input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #12e2a3; border: 3px solid #0b1016; box-shadow: 0 0 0 1px #12e2a3; cursor: pointer; }
+input[type='range'] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 999px; background: rgb(var(--ink-700)); outline: none; }
+input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: rgb(var(--good)); border: 3px solid rgb(var(--ink-850)); box-shadow: 0 0 0 1px rgb(var(--good)); cursor: pointer; }
 
 @keyframes pulse-dot { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
 .pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }

@@ -7,7 +7,7 @@ import { DistancePanel, LivePosture, TooCloseBanner } from '../components/Live.j
 
 export default function Dashboard({ onCalibrate }) {
   const stats = useStats(10000);
-  const { status, call } = useEngine();
+  const { status, call, bridge } = useEngine();
   const today = stats?.today || {};
   const healthy = Math.max(0, (today.total_active_seconds || 0) - (today.total_slouch_seconds || 0) - (today.total_resting_seconds || 0));
   return (
@@ -18,8 +18,9 @@ export default function Dashboard({ onCalibrate }) {
         </div>
       )}
       {status.state === 'NoCamera' && (
-        <div className="mb-6 rounded-2xl border border-bad/40 bg-bad/10 px-6 py-4 text-sm text-bad">
-          Camera disconnected or in use by another app. DeskHealth retries every 2 seconds — check the camera in Settings.
+        <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-bad/40 bg-bad/10 px-6 py-4 text-sm text-bad">
+          <span>The camera can't be opened. DeskHealth keeps retrying every 2 seconds. If it doesn't recover, close other apps using the camera or pick another camera in Settings.</span>
+          <button className="btn shrink-0" onClick={() => bridge.resume()}>Retry camera</button>
         </div>
       )}
       <TooCloseBanner />

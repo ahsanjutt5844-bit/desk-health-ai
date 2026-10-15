@@ -4,16 +4,27 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, Line, ComposedChart,
 } from 'recharts';
 import { weekday, pct, hm } from '../lib/format.js';
+import { useTheme } from '../lib/theme.jsx';
 
-const AXIS = { stroke: '#7d8a99', fontSize: 11, tickLine: false, axisLine: false };
-const TIP = {
-  contentStyle: { background: '#111922', border: '1px solid #223040', borderRadius: 12, fontSize: 12 },
-  labelStyle: { color: '#c3ccd6', fontWeight: 600, marginBottom: 4 },
-  cursor: { fill: 'rgba(255,255,255,0.03)' },
-};
-const legend = (v) => <span style={{ color: '#9aa6b4', fontSize: 12 }}>{v}</span>;
+// Shared axis / tooltip / legend styling, built from the current theme
+function useChartStyle() {
+  const { c } = useTheme();
+  return {
+    c,
+    axis: { stroke: c('mute-400'), fontSize: 11, tickLine: false, axisLine: false },
+    grid: c('chart-grid'),
+    tip: {
+      contentStyle: { background: c('ink-850'), border: `1px solid ${c('ink-700')}`, borderRadius: 12, fontSize: 12, boxShadow: `0 4px 16px ${c('shadow', 0.12)}` },
+      labelStyle: { color: c('head'), fontWeight: 600, marginBottom: 4 },
+      itemStyle: { color: c('mute-200') },
+      cursor: { fill: c('ink-700', 0.45) },
+    },
+    legend: (v) => <span style={{ color: c('mute-300'), fontSize: 12 }}>{v}</span>,
+  };
+}
 
 export function WeeklyBars({ week, height = 260 }) {
+  const { c, axis, grid, tip, legend } = useChartStyle();
   const data = (week || []).map((d) => {
     const total = d.total_active_seconds || 0;
     const slouch = pct(d.total_slouch_seconds, total);
@@ -22,40 +33,42 @@ export function WeeklyBars({ week, height = 260 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} barSize={16}>
-        <CartesianGrid vertical={false} stroke="#18222d" />
-        <XAxis dataKey="day" {...AXIS} />
-        <YAxis {...AXIS} tickFormatter={(v) => `${v}%`} domain={[0, 100]} width={40} />
-        <Tooltip {...TIP} formatter={(v, n, item) => (item.payload.total ? [`${v}%`, n] : ['no data', n])} />
+        <CartesianGrid vertical={false} stroke={grid} />
+        <XAxis dataKey="day" {...axis} />
+        <YAxis {...axis} tickFormatter={(v) => `${v}%`} domain={[0, 100]} width={40} />
+        <Tooltip {...tip} formatter={(v, n, item) => (item.payload.total ? [`${v}%`, n] : ['no data', n])} />
         <Legend iconType="circle" iconSize={8} formatter={legend} />
-        <Bar dataKey="Healthy" stackId="a" fill="#12e2a3" />
-        <Bar dataKey="Slouching" stackId="a" fill="#ff3d5e" radius={[6, 6, 0, 0]} />
+        <Bar dataKey="Healthy" stackId="a" fill={c('good')} />
+        <Bar dataKey="Slouching" stackId="a" fill={c('bad')} radius={[6, 6, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
 export function SplitDonut({ today, height = 260 }) {
+  const { c, tip, legend } = useChartStyle();
   const t = today || {};
   const slouch = t.total_slouch_seconds || 0;
   const resting = t.total_resting_seconds || 0;
   const healthy = Math.max(0, (t.total_active_seconds || 0) - slouch - resting);
   const data = [
-    { name: 'Healthy', value: healthy, color: '#12e2a3' },
-    { name: 'Resting', value: resting, color: '#ffb020' },
-    { name: 'Slouching', value: slouch, color: '#ff3d5e' },
+    { name: 'Healthy', value: healthy, color: c('good') },
+    { name: 'Resting', value: resting, color: c('warn') },
+    { name: 'Slouching', value: slouch, color: c('bad') },
   ];
   const empty = healthy + resting + slouch === 0;
+  const emptyData = [{ name: 'No data', value: 1, color: c('ink-700') }];
   return (
     <ResponsiveContainer width="100%" height={height}>
       <PieChart>
         <Pie
-          data={empty ? [{ name: 'No data', value: 1, color: '#18222d' }] : data}
+          data={empty ? emptyData : data}
           dataKey="value" innerRadius="62%" outerRadius="86%" paddingAngle={empty ? 0 : 3}
           stroke="none" startAngle={90} endAngle={-270}
         >
-          {(empty ? [{ color: '#18222d' }] : data).map((d, i) => <Cell key={i} fill={d.color} />)}
+          {(empty ? emptyData : data).map((d, i) => <Cell key={i} fill={d.color} />)}
         </Pie>
-        {!empty && <Tooltip {...TIP} formatter={(v, n) => [hm(v), n]} />}
+        {!empty && <Tooltip {...tip} formatter={(v, n) => [hm(v), n]} />}
         <Legend iconType="circle" iconSize={8} formatter={legend} />
       </PieChart>
     </ResponsiveContainer>
@@ -65,27 +78,27 @@ export function SplitDonut({ today, height = 260 }) {
 const hourLabel = (h) => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
 
 export function HourlyTrend({ hourly, minDistance, height = 260 }) {
+  const { c, axis, grid, tip, legend } = useChartStyle();
   const data = (hourly || []).map((r) => ({ hour: hourLabel(r.hour), Score: r.score, Distance: r.distance }));
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data}>
         <defs>
           <linearGradient id="scoreFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#12e2a3" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="#12e2a3" stopOpacity={0} />
+            <stop offset="0%" stopColor={c('good')} stopOpacity={0.3} />
+            <stop offset="100%" stopColor={c('good')} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid vertical={false} stroke="#18222d" />
-        <XAxis dataKey="hour" {...AXIS} />
-        <YAxis yAxisId="s" {...AXIS} domain={[0, 100]} width={34} />
-        <YAxis yAxisId="d" orientation="right" {...AXIS} domain={[20, 100]} width={40} tickFormatter={(v) => `${v}cm`} />
-        <Tooltip {...TIP} formatter={(v, n) => (n === 'Score' ? [`${v}%`, 'Posture score'] : [`${v} cm`, 'Screen distance'])} />
+        <CartesianGrid vertical={false} stroke={grid} />
+        <XAxis dataKey="hour" {...axis} />
+        <YAxis yAxisId="s" {...axis} domain={[0, 100]} width={34} />
+        <YAxis yAxisId="d" orientation="right" {...axis} domain={[20, 100]} width={40} tickFormatter={(v) => `${v}cm`} />
+        <Tooltip {...tip} formatter={(v, n) => (n === 'Score' ? [`${v}%`, 'Posture score'] : [`${v} cm`, 'Screen distance'])} />
         <Legend iconType="circle" iconSize={8} formatter={(v) => legend(v === 'Score' ? 'Posture score' : 'Screen distance')} />
-        {minDistance && <ReferenceLine yAxisId="d" y={minDistance} stroke="#ffb020" strokeDasharray="4 4" />}
-        <Area yAxisId="s" type="monotone" dataKey="Score" stroke="#12e2a3" strokeWidth={2.5} fill="url(#scoreFill)" />
-        <Line yAxisId="d" type="monotone" dataKey="Distance" stroke="#4f9dff" strokeWidth={2} dot={false} />
+        {minDistance && <ReferenceLine yAxisId="d" y={minDistance} stroke={c('warn')} strokeDasharray="4 4" />}
+        <Area yAxisId="s" type="monotone" dataKey="Score" stroke={c('good')} strokeWidth={2.5} fill="url(#scoreFill)" />
+        <Line yAxisId="d" type="monotone" dataKey="Distance" stroke={c('info')} strokeWidth={2} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   );
 }
-

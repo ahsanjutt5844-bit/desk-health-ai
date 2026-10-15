@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useEngine } from '../lib/engine.jsx';
 import { Card, SettingRow, SliderRow, Toggle } from '../components/ui.jsx';
+import { useTheme } from '../lib/theme.jsx';
 
 export default function Settings({ onCalibrate }) {
   const { settings, setSettings, bridge } = useEngine();
+  const { theme, setTheme } = useTheme();
   const [draft, setDraft] = useState(settings);
   const [cameras, setCameras] = useState(null);
   const [labels, setLabels] = useState([]);
@@ -42,7 +44,7 @@ export default function Settings({ onCalibrate }) {
     <div>
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <h2 className="font-display text-2xl font-extrabold text-white">Settings</h2>
+          <h2 className="font-display text-2xl font-extrabold text-head">Settings</h2>
           <p className="mt-1 text-sm text-mute-400">Changes are stored locally in SQLite — zero cloud sync.</p>
         </div>
         <div className="flex items-center gap-3">
@@ -106,6 +108,19 @@ export default function Settings({ onCalibrate }) {
               <button className="btn btn-primary" onClick={onCalibrate}>Recalibrate posture</button>
               {settings?.calibrated && <button className="btn" onClick={async () => { await bridge.clearCalibration(); setSettings(await bridge.getSettings()); }}>Clear</button>}
             </div>
+          </Card>
+          <Card title={<span className="text-info">Appearance</span>}>
+            <div className="flex gap-2" role="radiogroup" aria-label="Theme">
+              {['light', 'dark'].map((t) => (
+                <button
+                  key={t} role="radio" aria-checked={theme === t} onClick={() => setTheme(t)}
+                  className={`btn flex-1 justify-center capitalize ${theme === t ? '!border-good !text-good' : ''}`}
+                >
+                  {t === 'light' ? '☀ Light' : '☾ Dark'}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-mute-400">Applies immediately and is remembered on this computer.</p>
           </Card>
           <Card title={<span className="text-info">Data & maintenance</span>}>
             <p className="text-xs leading-relaxed text-mute-400">Only numbers (state, score, angles, distance, timestamps) are stored. Video frames are never saved or uploaded.</p>

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -65,12 +66,22 @@ class FrameAnalysis:
     pose_points: Optional[list] = None   # pixel points for the preview overlay
 
 
-def _backend():
+def _backends():
+    """Capture backends to try, best first. Windows webcams sometimes refuse
+    one backend right after being released, so fall back to the others."""
     if sys.platform.startswith("win"):
-        return cv2.CAP_DSHOW
+        return [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
     if sys.platform == "darwin":
-        return cv2.CAP_AVFOUNDATION
-    return cv2.CAP_ANY
+        return [cv2.CAP_AVFOUNDATION, cv2.CAP_ANY]
+    return [cv2.CAP_ANY]
+
+
+def _backend():
+    return _backends()[0]
+
+
+WARMUP_SECONDS = 3.0      # webcams can return empty frames for a while after opening
+RELEASE_COOLDOWN_S = 1.0  # give the driver time to free the device after release()
 
 
 class AIVisionEngine:
@@ -79,6 +90,9 @@ class AIVisionEngine:
         self.target_fps = target_fps
         self.is_tracking = False
         self.cap: Optional[cv2.VideoCapture] = None
+        self._released_at = 0.0
+        self._still = None
+        self.last_error: Optional[str] = None
         self.focal_scale = DEFAULT_FOCAL_SCALE
 
         paths = ensure_models()
@@ -110,25 +124,39 @@ class AIVisionEngine:
             self.cap = cap
             self.is_tracking = True
             return True
-        cap = cv2.VideoCapture(self.camera_idx, _backend())
-        if not cap.isOpened():
+        # wait until the device has been fully freed by a previous release()
+        wait = RELEASE_COOLDOWN_S - (time.time() - self._released_at)
+        if wait > 0:
+            time.sleep(wait)
+        self.last_error = None
+        for backend in _backends():
+            cap = cv2.VideoCapture(self.camera_idx, backend)
+            if not cap.isOpened():
+                cap.release()
+                self.last_error = f"backend {backend}: could not open camera {self.camera_idx}"
+                continue
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            # warm-up: keep reading until the camera delivers a real frame
+            deadline = time.time() + WARMUP_SECONDS
+            while time.time() < deadline:
+                ok, frame = cap.read()
+                if ok and frame is not None and frame.size:
+                    self.cap = cap
+                    self.is_tracking = True
+                    return True
+                time.sleep(0.1)
             cap.release()
-            return False
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        ok, _ = cap.read()
-        if not ok:
-            cap.release()
-            return False
-        self.cap = cap
-        self.is_tracking = True
-        return True
+            self._released_at = time.time()
+            self.last_error = f"backend {backend}: camera opened but sent no frames"
+        return False
 
     def pause_stream(self):
         """Release the webcam lock so other apps (Zoom/Teams) can use it."""
         if self.cap is not None:
             self.cap.release()
+            self._released_at = time.time()
         self.cap = None
         self._still = None
         self.is_tracking = False

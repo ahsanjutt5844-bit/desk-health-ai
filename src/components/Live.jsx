@@ -3,6 +3,7 @@ import { useEngine } from '../lib/engine.jsx';
 import { STATE_STYLE, mmss } from '../lib/format.js';
 import PostureFigure from './PostureFigure.jsx';
 import { Bar, Card } from './ui.jsx';
+import { useTheme } from '../lib/theme.jsx';
 
 // ---------------------------------------------------------------- posture
 export function LivePosture({ onCalibrate }) {
@@ -108,6 +109,7 @@ function Metric({ label, value, unit }) {
 // ---------------------------------------------------------------- distance
 export function DistancePanel() {
   const { status, settings } = useEngine();
+  const { c } = useTheme();
   const min = settings?.min_distance_cm ?? 50;
   const d = status.distance_cm;
   const enabled = settings?.eye_strain_tracking !== false;
@@ -128,9 +130,9 @@ export function DistancePanel() {
               {d ? (close ? 'Too close' : 'Safe distance') : 'No face detected'}
             </div>
           </div>
-          <div className="relative mt-6 h-3 rounded-full" style={{ background: `linear-gradient(to right, #ff3d5e55 0%, #ff3d5e55 ${pos(min)}, #12e2a355 ${pos(min)}, #12e2a355 ${pos(80)}, #4f9dff44 ${pos(80)})` }}>
+          <div className="relative mt-6 h-3 rounded-full" style={{ background: `linear-gradient(to right, ${c('bad', 0.3)} 0%, ${c('bad', 0.3)} ${pos(min)}, ${c('good', 0.3)} ${pos(min)}, ${c('good', 0.3)} ${pos(80)}, ${c('info', 0.25)} ${pos(80)})` }}>
             <div className="absolute -top-1 h-5 w-0.5 bg-warn" style={{ left: pos(min) }} />
-            {d && <div className="absolute -top-1.5 h-6 w-6 -translate-x-1/2 rounded-full border-4 border-ink-850 bg-white shadow transition-all duration-500" style={{ left: pos(d) }} />}
+            {d && <div className="absolute -top-1.5 h-6 w-6 -translate-x-1/2 rounded-full border-4 border-ink-850 bg-head shadow transition-all duration-500" style={{ left: pos(d) }} />}
           </div>
           <div className="mt-2 flex justify-between font-mono text-[10px] text-mute-400">
             <span>{lo}cm</span><span className="text-warn">min {min}cm</span><span>{hi}cm</span>
@@ -188,9 +190,9 @@ export function CalibrationModal({ open, onClose }) {
     setTimeout(() => bridge.calibrate(known ? Number(known) : null), 1500);
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 backdrop-blur-sm">
       <div className="card w-[520px] p-8">
-        <h2 className="font-display text-xl font-extrabold text-white">Posture calibration</h2>
+        <h2 className="font-display text-xl font-extrabold text-head">Posture calibration</h2>
         {phase === 'intro' && (
           <>
             <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-mute-300">

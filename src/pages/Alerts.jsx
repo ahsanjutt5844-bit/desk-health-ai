@@ -17,7 +17,7 @@ export default function Alerts() {
   return (
     <div>
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total today" value={alerts.length} tone="text-white" />
+        <StatCard label="Total today" value={alerts.length} tone="text-head" />
         <StatCard label="Posture alerts" value={posture} tone="text-bad" />
         <StatCard label="Eye alerts" value={eye} tone="text-info" />
       </div>
@@ -50,7 +50,7 @@ export default function Alerts() {
         )}
       </Card>
       <div className="mt-5 flex items-center gap-3 rounded-xl border border-ink-700 bg-ink-850 px-5 py-3 text-xs text-mute-400">
-        <span className="rounded bg-info px-1.5 font-bold text-white">i</span>
+        <span className="rounded bg-info px-1.5 font-bold text-head">i</span>
         Alerts are stored in the local <code className="rounded bg-ink-700 px-1.5 py-0.5 text-mute-200">ALERT_HISTORY</code> SQLite table and fetched via
         <code className="rounded bg-ink-700 px-1.5 py-0.5 text-mute-200">ipc-get-posture-stats</code>.
       </div>
