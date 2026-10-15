@@ -1,0 +1,65 @@
+name: Build Windows installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Python dependencies
+        run: pip install -r engine/requirements.txt
+
+      - name: Unit tests (posture formula, alerts)
+        run: python -m pytest engine/tests -q
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build UI
+        run: npm run build:ui
+
+      - name: Build AI engine (PyInstaller)
+        run: python scripts/build_engine.py
+
+      - name: Smoke test packaged engine on Windows
+        run: python scripts/smoke_engine.py engine-dist/deskhealth-engine/deskhealth-engine.exe
+
+      - name: Build installer
+        run: npx electron-builder --win nsis --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Upload installer (workflow artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeskHealth-AI-Setup
+          path: release/*.exe
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: DeskHealth AI test build ${{ github.run_number }}
+          body: |
+            Windows installer for DeskHealth AI (FYP S26CS034).
+            Download **DeskHealth-AI-Setup-*.exe** below, run it, and if Windows shows
+            "Windows protected your PC" click **More info → Run anyway** (the build is not code-signed).
+          files: release/*.exe
+          make_latest: true

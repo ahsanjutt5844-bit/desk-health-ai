@@ -1,0 +1,6 @@
+opencv-python>=4.8
+mediapipe>=0.10.14
+numpy
+# build / test
+pyinstaller>=6.0
+pytest

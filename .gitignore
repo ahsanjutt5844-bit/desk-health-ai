@@ -1,0 +1,15 @@
+node_modules/
+dist/
+release/
+engine-dist/
+build/pyinstaller/
+build/*.spec
+engine/.venv/
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.db-wal
+*.db-shm
+engine-win/
+desk-health-ai.zip
