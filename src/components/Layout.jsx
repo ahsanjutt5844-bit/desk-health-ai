@@ -45,9 +45,18 @@ export function Sidebar({ page, setPage }) {
           );
         })}
       </nav>
-      <div className="border-t border-ink-700 px-6 py-4">
-        <div className="text-sm font-semibold text-mute-200">UCP — S26CS034</div>
-        <div className="mt-0.5 font-mono text-[10px] text-mute-400">v0.5.0 · BSCS FYP{bridge.isMock ? ' · demo data' : ''}</div>
+      <div className="flex items-end justify-between gap-2 border-t border-ink-700 px-6 py-4">
+        <div>
+          <div className="text-sm font-semibold text-mute-200">UCP — S26CS034</div>
+          <div className="mt-0.5 font-mono text-[10px] text-mute-400">v0.5.1 · BSCS FYP{bridge.isMock ? ' · demo data' : ''}</div>
+        </div>
+        <button
+          className="rounded-lg px-2 py-1 text-xs font-semibold text-mute-400 transition hover:bg-bad/10 hover:text-bad"
+          title="Stop tracking and close DeskHealth AI completely"
+          onClick={() => bridge.quit()}
+        >
+          ⏻ Quit
+        </button>
       </div>
     </aside>
   );

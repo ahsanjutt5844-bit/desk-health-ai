@@ -33,9 +33,12 @@ measured as a change against the user's own calibrated upright posture:
 
     slouch_index = 0.50*Kyphosis + 0.30*FHP + 0.20*PelvicTilt     (0..1)
 
-The user is SLOUCHING only when slouch_index >= threshold AND the shoulder
-component itself is significant. Moving only the neck (e.g. looking down at a
+The user is SLOUCHING when the shoulders went down or forward (the shoulder
+component alone reaches the threshold), or when slouch_index reaches it with a
+significant shoulder component. Moving only the neck (e.g. looking down at a
 phone) is therefore NOT reported as slouching - the shoulders are the focus.
+Leaning back counts as Resting only with upright shoulders; slumping back
+(shoulders drop while moving away from the screen) is slouching.
 
 This module is pure Python (no OpenCV / MediaPipe) so it can be unit tested.
 """
@@ -84,6 +87,7 @@ class Observation:
     l_hip: Optional[tuple[float, float]] = None
     r_hip: Optional[tuple[float, float]] = None
     distance_cm: Optional[float] = None     # face-to-screen distance
+    img_cy: Optional[float] = None          # image centre row (px), for perspective correction
 
 
 @dataclass
@@ -96,6 +100,7 @@ class Features:
     face_width: float
     torso: Optional[float]    # vertical shoulder-mid -> hip-mid (px), if hips visible
     distance_cm: Optional[float]
+    img_cy: Optional[float] = None
 
     @staticmethod
     def from_observation(o: Observation) -> "Features":
@@ -114,6 +119,7 @@ class Features:
             face_width=face_w,
             torso=torso,
             distance_cm=o.distance_cm,
+            img_cy=o.img_cy,
         )
 
 
@@ -149,6 +155,7 @@ class FeatureSmoother:
             face_width=mix(f.face_width, s.face_width),
             torso=mix(f.torso, s.torso),
             distance_cm=mix(f.distance_cm, s.distance_cm),
+            img_cy=f.img_cy,
         )
         return self.state
 
@@ -232,10 +239,32 @@ class PostureAnalyzer:
         sw = f.shoulder_width
 
         # ---- 1. Thoracic kyphosis / rounded & dropped shoulders ----------
-        # positive = shoulders went down (image y grows downward)
-        drop_ratio = (f.shoulder_y - b.shoulder_y) / b.shoulder_width
         # positive = shoulders came closer to the camera (leaning forward)
-        forward_ratio = sw / b.shoulder_width - 1.0
+        scale = sw / b.shoulder_width
+        forward_ratio = scale - 1.0
+
+        def vertical_drop(y_now, y_base):
+            # Moving toward/away from the camera scales the whole image about
+            # its centre, so a body that only moved back seems to rise (the
+            # webcam is below the shoulders). Compare with where the point
+            # SHOULD appear at the new distance to get the real drop.
+            if f.img_cy is None:
+                return (y_now - y_base) / b.shoulder_width
+            expected = f.img_cy + (y_base - f.img_cy) * scale
+            return (y_now - expected) / sw
+
+        # positive = shoulders went down (real drop, independent of distance)
+        drop_ratio = vertical_drop(f.shoulder_y, b.shoulder_y)
+
+        # Reclining rotates the upper body around the hips, which lowers the
+        # shoulders by T*(1 - cos(angle)) even with a straight back. Remove only
+        # that geometric part; any extra drop is slumping (= slouching).
+        if forward_ratio < 0:
+            d0 = b.distance_cm or 60.0
+            back_cm = d0 * (b.shoulder_width / sw - 1.0)
+            angle = math.asin(clamp(back_cm / AVG_TORSO_LENGTH_CM))
+            recline_drop_cm = AVG_TORSO_LENGTH_CM * (1.0 - math.cos(angle))
+            drop_ratio -= recline_drop_cm / AVG_SHOULDER_WIDTH_CM
         # positive = shoulders look narrower although the body did not move
         # back from the screen -> shoulders rolled inward (protraction).
         # (Comparing against face width is NOT used: a forward head makes the
@@ -246,10 +275,12 @@ class PostureAnalyzer:
             moved_back = f.face_width / b.face_width < 0.95
         round_ratio = 0.0 if moved_back else 1.0 - sw / b.shoulder_width
 
-        s_drop = severity(drop_ratio, 0.04, 0.18)
-        s_forward = severity(forward_ratio, 0.03, 0.18)
+        # shoulders down OR forward is slouching on its own, so each of these
+        # reaches the slouch threshold by itself (~2-3 cm of real movement)
+        s_drop = severity(drop_ratio, 0.025, 0.09)
+        s_forward = severity(forward_ratio, 0.03, 0.15)
         s_round = severity(round_ratio, 0.04, 0.15)
-        kyphosis = clamp(s_drop + 0.8 * s_forward + 0.6 * s_round)
+        kyphosis = clamp(s_drop + 0.9 * s_forward + 0.6 * s_round)
 
         # ---- 2. Forward head posture --------------------------------------
         # neck gap normalised by shoulder width cancels out scale changes
@@ -258,7 +289,7 @@ class PostureAnalyzer:
         forward_head = severity(neck_angle, 12.0, 40.0)
 
         # ---- 3. Posterior pelvic tilt (proxy) -----------------------------
-        nose_drop_ratio = (f.nose_y - b.nose_y) / b.shoulder_width
+        nose_drop_ratio = vertical_drop(f.nose_y, b.nose_y)
         if b.torso and f.torso:
             torso_loss = 1.0 - (f.torso / sw) / (b.torso / b.shoulder_width)
             pelvic = severity(torso_loss, 0.05, 0.20)
@@ -285,19 +316,29 @@ class PostureAnalyzer:
             math.atan2(shoulder_forward_cm, AVG_TORSO_LENGTH_CM - shoulder_drop_cm)
         )
 
-        # ---- Resting: user leaned far back in the chair (US-07) ----------
+        # ---- Classification ----------------------------------------------
+        # Shoulders down or forward = slouching (the shoulder component alone
+        # reaches the threshold). The full formula can also trigger it when
+        # head and pelvis add to a smaller shoulder change.
+        t = self.threshold
+        enter = kyphosis >= t or (index >= t and kyphosis >= SHOULDER_GATE)
+        stay = kyphosis >= t - 0.08 or (index >= t - 0.07 and kyphosis >= SHOULDER_GATE - 0.05)
+        self._slouching = stay if self._slouching else enter
+
+        # ---- Resting: leaned back in the chair with an UPRIGHT body (US-07)
+        # Sliding down / slumping back also moves the user away from the
+        # screen, but the shoulders drop - that is slouching, not resting.
         leaned_back = forward_ratio <= -0.10
         if leaned_back and b.distance_cm and f.distance_cm:
             leaned_back = f.distance_cm >= b.distance_cm * 1.10
+        upright = s_drop == 0.0 and forward_head < 0.5 and pelvic < 0.3
 
-        if leaned_back:
+        if self._slouching:
+            state = "Slouching"
+        elif leaned_back and upright:
             state = "Resting"
-            self._slouching = False
         else:
-            enter = index >= self.threshold and kyphosis >= SHOULDER_GATE
-            stay = index >= self.threshold - 0.07 and kyphosis >= SHOULDER_GATE - 0.05
-            self._slouching = stay if self._slouching else enter
-            state = "Slouching" if self._slouching else "Healthy"
+            state = "Healthy"
 
         return PostureResult(
             state=state,

@@ -32,9 +32,15 @@ user's own **calibrated upright posture**:
 | Forward head posture (30%) | Head moves in front of / below the shoulders | ear-to-shoulder vertical gap ÷ shoulder width → neck flexion `θ = acos(gap / upright_gap)` |
 | Posterior pelvic tilt (20%) | The pelvis is usually hidden by the desk, so a **proxy** is used | torso (shoulder-to-hip) shortening if the hips are visible, otherwise the whole trunk sinking (head **and** shoulders drop together) |
 
-**Shoulder gate:** the state is **Slouching** only when `slouch_index ≥ threshold` (default 35%) **and**
-the shoulder component is ≥ 0.30. Bending only the neck (for example looking down at a phone) is not slouching.
-**Resting:** leaning far back (shoulders ≥ 10% smaller and face ≥ 10% farther away) pauses alerts (US-07).
+**Classification:** the user is **Slouching** as soon as the **shoulders go down or move forward**
+(the shoulder component alone reaches the threshold, default 35% ≈ 2 cm of movement), or when the full
+slouch index reaches the threshold with a smaller shoulder change. Bending only the neck (for example
+looking down at a phone) is not slouching.
+Shoulder drop is measured **independent of distance**: moving toward or away from the camera scales the
+image about its centre, so the drop is compared with where the shoulders *should* appear at the new
+distance, and the small drop caused by reclining around the hips is removed.
+**Resting:** leaning back counts as Resting (alerts paused, US-07) only with **upright shoulders**.
+Slumping back (shoulders drop while moving away from the screen) is **Slouching**.
 
 **Screen distance:** pinhole camera model, `distance = focal_px × real_size / size_px`, averaged over the
 iris diameter (≈1.17 cm) and the inter-pupil distance (≈6.3 cm) from MediaPipe FaceLandmarker.

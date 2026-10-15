@@ -232,6 +232,7 @@ class AIVisionEngine:
                     l_hip=p(L_HIP) if hips else None,
                     r_hip=p(R_HIP) if hips else None,
                     distance_cm=distance,
+                    img_cy=h / 2,
                 )
                 points = {k: p(i) for k, i in (("nose", NOSE), ("l_ear", L_EAR),
                                                 ("r_ear", R_EAR), ("l_sh", L_SHOULDER),

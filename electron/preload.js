@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('deskHealth', {
   exportCsv: () => ipcRenderer.invoke('ipc-export-csv'),
   clearHistory: () => ipcRenderer.invoke('ipc-clear-history'),
   triggerAlert: (msg) => ipcRenderer.send('ipc-trigger-alert', { msg }),
+  getPrefs: () => ipcRenderer.invoke('ipc-get-prefs'),
+  setPrefs: (p) => ipcRenderer.invoke('ipc-set-prefs', p),
+  quit: () => ipcRenderer.send('ipc-quit'),
 
   onStatus: on('engine-status'),
   onFrame: on('engine-frame'),

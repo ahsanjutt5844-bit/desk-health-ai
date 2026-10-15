@@ -1,7 +1,7 @@
 {
   "name": "desk-health-ai",
   "productName": "DeskHealth AI",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Posture (slouching) & eye strain monitor - BSCS FYP S26CS034, University of Central Punjab",
   "main": "electron/main.js",
   "type": "commonjs",
@@ -54,7 +54,8 @@
       "perMachine": false,
       "runAfterFinish": true,
       "createDesktopShortcut": true,
-      "shortcutName": "DeskHealth AI"
+      "shortcutName": "DeskHealth AI",
+      "include": "build/installer.nsh"
     },
     "mac": {
       "target": "dmg",

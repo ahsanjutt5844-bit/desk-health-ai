@@ -70,6 +70,7 @@ def body(trunk_lean=0.0, shoulder_drop=0.0, protraction=0.0, neck_flex=0.0,
         l_hip=project((12, hip[1], hip[2])) if hips_visible else None,
         r_hip=project((-12, hip[1], hip[2])) if hips_visible else None,
         distance_cm=eye_z,
+        img_cy=CY,
     )
 
 
@@ -106,6 +107,41 @@ def test_shoulders_down_and_forward_alone_is_slouch():
     # main focus: shoulders. Neck stays neutral.
     r = analyze(trunk_lean=18, shoulder_drop=5)
     assert r.state == "Slouching", r
+
+
+def test_shoulders_down_only_is_slouching():
+    # user report: shoulders go down from the calibrated position -> slouching
+    r = analyze(shoulder_drop=3)
+    assert r.state == "Slouching", r
+
+
+def test_shoulders_forward_only_is_slouching():
+    r = analyze(trunk_lean=8)
+    assert r.state == "Slouching", r
+
+
+def test_tiny_shoulder_movement_is_healthy():
+    r = analyze(shoulder_drop=0.8)
+    assert r.state == "Healthy", r
+
+
+def test_slumping_back_is_slouching_not_resting():
+    # user report: slouching while moving AWAY from the screen was shown as
+    # Resting. Sliding down / slumping back = shoulders drop + body moves back.
+    r = analyze(trunk_lean=-14, shoulder_drop=3, slide_down=3)
+    assert r.state == "Slouching", r
+
+
+def test_moving_back_hides_no_drop():
+    # body moved back 15 cm with shoulders dropped 5 cm: the drop must still count
+    r = analyze(move_z=15, shoulder_drop=5)
+    assert r.state == "Slouching", r
+
+
+def test_sitting_upright_further_away_is_healthy():
+    r = analyze(move_z=15)
+    assert r.state in ("Healthy", "Resting"), r
+    assert r.kyphosis < 0.2, r
 
 
 def test_neck_only_is_not_slouching():

@@ -1,5 +1,15 @@
 // Spawns and talks to the Python AI engine over stdin/stdout (newline JSON).
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
+
+function killTree(pid) {
+  try {
+    if (process.platform === 'win32') {
+      execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+    } else {
+      process.kill(pid, 'SIGKILL');
+    }
+  } catch { /* already gone */ }
+}
 const { EventEmitter } = require('events');
 const path = require('path');
 const fs = require('fs');
@@ -117,13 +127,24 @@ class EngineBridge extends EventEmitter {
     });
   }
 
-  stop() {
+  // Ask the engine to shut down; if it hasn't exited after `timeoutMs`, kill
+  // it together with any child processes. Resolves once it is gone, so the
+  // app never leaves a hidden engine process running (it would block
+  // uninstalling).
+  stop(timeoutMs = 2500) {
     this.stopping = true;
-    if (!this.proc) return;
-    try { this.send('shutdown'); } catch { /* ignore */ }
     const p = this.proc;
-    setTimeout(() => { try { p.kill(); } catch { /* ignore */ } }, 1500);
+    if (!p || p.exitCode !== null) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => { clearTimeout(timer); resolve(); };
+      p.once('exit', done);
+      const timer = setTimeout(() => {
+        killTree(p.pid);
+        setTimeout(resolve, 300);
+      }, timeoutMs);
+      try { this.send('shutdown'); p.stdin.end(); } catch { /* ignore */ }
+    });
   }
 }
 
-module.exports = { EngineBridge };
+module.exports = { EngineBridge, killTree };

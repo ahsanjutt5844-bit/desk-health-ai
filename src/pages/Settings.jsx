@@ -12,6 +12,9 @@ export default function Settings({ onCalibrate }) {
   const [msg, setMsg] = useState('');
 
   useEffect(() => { if (settings) setDraft(settings); }, [settings]);
+  const [closeAction, setCloseAction] = useState('ask');
+  useEffect(() => { bridge.getPrefs?.().then((p) => p && setCloseAction(p.closeAction)); }, [bridge]);
+  const chooseClose = async (v) => { setCloseAction(v); await bridge.setPrefs({ closeAction: v }); };
   useEffect(() => {
     bridge.listCameras().then(setCameras).catch(() => setCameras([]));
     // device names come from the OS through Chromium; indices from OpenCV
@@ -71,7 +74,7 @@ export default function Settings({ onCalibrate }) {
           </Card>
           <Card title="Thresholds">
             <SliderRow title="Alert Timer" desc="Continuous slouching needed before a posture alert." value={draft.alert_timer_mins} min={1} max={10} unit=" min" onChange={set('alert_timer_mins')} />
-            <SliderRow title="Slouch Threshold" desc="Slouch index (shoulders 50% + head 30% + pelvis 20%) that counts as slouching. Lower = stricter." value={draft.posture_threshold} min={20} max={60} unit="%" onChange={set('posture_threshold')} />
+            <SliderRow title="Slouch Threshold" desc="How much your shoulders may drop or move forward before it counts as slouching (35% ≈ 2 cm). Lower = stricter." value={draft.posture_threshold} min={20} max={60} unit="%" onChange={set('posture_threshold')} />
             <SliderRow title="Minimum Screen Distance" desc="Closer than this counts as too close." value={draft.min_distance_cm} min={35} max={75} unit=" cm" onChange={set('min_distance_cm')} />
             <SliderRow title="Too-close Delay" desc="How long you may stay too close before being notified." value={draft.too_close_seconds} min={2} max={30} unit=" s" onChange={set('too_close_seconds')} />
             <SliderRow title="Analysis Rate" desc="Frames analysed per second. Lower = less CPU." value={draft.target_fps} min={1} max={3} unit=" FPS" onChange={set('target_fps')} />
@@ -121,6 +124,24 @@ export default function Settings({ onCalibrate }) {
               ))}
             </div>
             <p className="mt-3 text-xs text-mute-400">Applies immediately and is remembered on this computer.</p>
+          </Card>
+          <Card title={<span className="text-info">When I close the window</span>}>
+            <div className="grid gap-2" role="radiogroup" aria-label="Close button behaviour">
+              {[
+                ['ask', 'Ask me every time'],
+                ['tray', 'Keep running in the background (system tray)'],
+                ['quit', 'Quit DeskHealth AI completely'],
+              ].map(([v, label]) => (
+                <label key={v} className="flex cursor-pointer items-center gap-3 rounded-xl border border-ink-700 px-4 py-2.5 text-sm text-mute-200 hover:bg-ink-800">
+                  <input type="radio" name="closeAction" checked={closeAction === v} onChange={() => chooseClose(v)} className="accent-[rgb(var(--good))]" />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-xs text-mute-400">You can always quit from the sidebar or the tray icon (^ next to the clock).</p>
+              <button className="btn btn-danger shrink-0" onClick={() => bridge.quit()}>Quit app</button>
+            </div>
           </Card>
           <Card title={<span className="text-info">Data & maintenance</span>}>
             <p className="text-xs leading-relaxed text-mute-400">Only numbers (state, score, angles, distance, timestamps) are stored. Video frames are never saved or uploaded.</p>

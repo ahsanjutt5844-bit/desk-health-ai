@@ -5,6 +5,7 @@ const {
   app, BrowserWindow, Tray, Menu, Notification, ipcMain, dialog, nativeImage, shell,
 } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { EngineBridge } = require('./engine-bridge');
 const { CallDetector } = require('./call-detector');
 
@@ -19,6 +20,18 @@ let quitting = false;
 let lastStatus = { state: 'Starting' };
 let settings = {};
 let lastAlertId = null;
+let shutdownDone = false;
+
+// Small UI preferences kept by Electron (not in the engine database)
+//   closeAction: 'ask' | 'tray' | 'quit'   - what the window's X button does
+const PREFS_FILE = () => path.join(app.getPath('userData'), 'prefs.json');
+let prefs = { closeAction: 'ask', trayHintShown: false };
+function loadPrefs() {
+  try { prefs = { ...prefs, ...JSON.parse(fs.readFileSync(PREFS_FILE(), 'utf8')) }; } catch { /* first run */ }
+}
+function savePrefs() {
+  try { fs.writeFileSync(PREFS_FILE(), JSON.stringify(prefs, null, 2)); } catch { /* ignore */ }
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -50,23 +63,55 @@ function createWindow() {
   win.once('ready-to-show', () => {
     if (!process.argv.includes('--hidden')) win.show();
   });
-  // Closing / minimising hides to the tray; tracking continues (TD-02)
-  win.on('close', (e) => {
-    if (!quitting) {
-      e.preventDefault();
-      win.hide();
-      setPreview(false);
-    }
-  });
-  win.on('minimize', (e) => {
+  // X button: ask whether to keep tracking in the background or quit.
+  // The answer can be remembered (Settings -> "When I close the window").
+  win.on('close', async (e) => {
+    if (quitting) return;
     e.preventDefault();
-    win.hide();
-    setPreview(false);
+    let action = prefs.closeAction;
+    if (action === 'ask') {
+      const res = await dialog.showMessageBox(win, {
+        type: 'question',
+        title: 'Close DeskHealth AI',
+        message: 'Keep tracking your posture in the background?',
+        detail: 'In the background DeskHealth AI stays in the system tray (click ^ next to the clock) and keeps sending posture and distance alerts.',
+        buttons: ['Keep running in background', 'Quit DeskHealth AI', 'Cancel'],
+        defaultId: 0,
+        cancelId: 2,
+        checkboxLabel: "Remember my choice",
+      });
+      if (res.response === 2) return;
+      action = res.response === 1 ? 'quit' : 'tray';
+      if (res.checkboxChecked) { prefs.closeAction = action; savePrefs(); }
+    }
+    if (action === 'quit') quitApp();
+    else hideToTray();
   });
+  // Minimise works normally (taskbar button); tracking continues
+  win.on('minimize', () => setPreview(false));
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+}
+
+function hideToTray() {
+  win.hide();
+  setPreview(false);
+  if (!prefs.trayHintShown && Notification.isSupported()) {
+    new Notification({
+      title: 'DeskHealth AI is still running',
+      body: 'Posture tracking continues. Open it or quit from the tray icon (click ^ next to the clock).',
+      icon: ICON,
+    }).show();
+    prefs.trayHintShown = true;
+    savePrefs();
+  }
+}
+
+function quitApp() {
+  quitting = true;
+  app.quit();
 }
 
 function showWindow(page) {
@@ -118,7 +163,7 @@ function buildTrayMenu() {
     ] },
     { label: 'Recalibrate posture', click: () => showWindow('calibrate') },
     { type: 'separator' },
-    { label: 'Quit', click: () => { quitting = true; app.quit(); } },
+    { label: 'Quit DeskHealth AI', click: quitApp },
   ]));
 }
 
@@ -222,6 +267,13 @@ function registerIpc() {
 
   // Additional channels
   handle('ipc-get-settings', () => engine.request('get_settings'));
+  handle('ipc-get-prefs', () => prefs);
+  handle('ipc-set-prefs', (p) => {
+    if (['ask', 'tray', 'quit'].includes(p.closeAction)) prefs.closeAction = p.closeAction;
+    savePrefs();
+    return prefs;
+  });
+  ipcMain.on('ipc-quit', () => quitApp());
   handle('ipc-reset-settings', async () => {
     settings = await engine.request('reset_settings');
     applyAutoPause();
@@ -249,6 +301,7 @@ function registerIpc() {
 app.on('second-instance', () => showWindow());
 
 app.whenReady().then(() => {
+  loadPrefs();
   registerIpc();
   startEngine();
   createWindow();
@@ -257,8 +310,17 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', (e) => e.preventDefault()); // keep running in tray
 app.on('activate', () => showWindow());
-app.on('before-quit', () => {
+// Quit cleanly: stop the AI engine (and the camera) BEFORE the app exits, so
+// no hidden process is left running that would block uninstalling.
+app.on('before-quit', (e) => {
   quitting = true;
+  if (shutdownDone) return;
+  e.preventDefault();
   callDetector?.stop();
-  engine?.stop();
+  const finish = () => {
+    shutdownDone = true;
+    tray?.destroy();
+    app.exit(0);
+  };
+  (engine ? engine.stop() : Promise.resolve()).then(finish, finish);
 });

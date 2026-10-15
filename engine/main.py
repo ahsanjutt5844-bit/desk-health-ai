@@ -463,8 +463,10 @@ def stdin_reader(engine: Engine):
             engine.commands.put(json.loads(line))
         except json.JSONDecodeError:
             log(f"bad command: {line[:80]}", "warn")
-    # parent process closed the pipe -> shut down
+    # parent process closed the pipe -> shut down; force-exit if the main loop
+    # is busy (e.g. waiting for a camera) so no orphan process is left behind
     engine.commands.put({"cmd": "shutdown"})
+    threading.Timer(4.0, os._exit, args=(0,)).start()
 
 
 def main():
