@@ -1,0 +1,171 @@
+@startuml classes
+skinparam dpi 170
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam linetype polyline
+skinparam nodesep 40
+skinparam ranksep 60
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #333333
+  ArrowColor #333333
+  HeaderBackgroundColor #EEF3F1
+}
+hide empty members
+
+package "Presentation & Desktop Shell (JavaScript)" {
+  class ReactDashboard <<module>> {
+    - currentPage : String
+    - theme : String
+    + renderPostureCharts(stats : Object) : void
+    + updateSettings(values : Object) : Promise
+    + calibrate(knownDistanceCm : Number) : Promise
+    + quit() : void
+  }
+  class ElectronMain <<module>> {
+    - win : BrowserWindow
+    - tray : Tray
+    - prefs : Object
+    + createWindow() : void
+    + hideToTray() : void
+    + quitApp() : void
+    + showNotification(alert : Object) : void
+    + registerIpc() : void
+  }
+  class EventEmitter <<Node.js>>
+  class EngineBridge {
+    - proc : ChildProcess
+    - pending : Map
+    + start() : void
+    + send(cmd : String, args : Object) : void
+    + request(cmd : String, args : Object) : Promise
+    + stop(timeoutMs : Number) : Promise
+  }
+  class CallDetector {
+    - intervalMs : Number
+    - active : Boolean
+    + start() : void
+    + stop() : void
+    + check() : Promise
+  }
+}
+
+package "AI Processing Engine (Python)" {
+  class Engine {
+    - settings : dict
+    - paused_reasons : set
+    - session_id : int
+    - calibrating : dict
+    + dispatch(cmd : str, a : dict) : object
+    + ensure_camera() : bool
+    + process_once() : void
+    + status_dict() : dict
+    + run() : void
+  }
+  class AIVisionEngine {
+    + camera_idx : int
+    + target_fps : int
+    + is_tracking : bool
+    + focal_scale : float
+    + start_stream() : bool
+    + pause_stream() : void
+    + read() : ndarray
+    + process_frame(frame : ndarray) : FrameAnalysis
+    + {static} list_cameras(max_index : int) : list
+  }
+  class FrameAnalysis <<dataclass>> {
+    + distance_cm : float
+    + brightness : float
+    + width : int
+    + height : int
+  }
+  class Observation <<dataclass>> {
+    + l_shoulder : tuple
+    + r_shoulder : tuple
+    + l_ear : tuple
+    + r_ear : tuple
+    + nose : tuple
+    + distance_cm : float
+  }
+  class Features <<dataclass>> {
+    + shoulder_width : float
+    + shoulder_y : float
+    + neck_gap : float
+    + torso : float
+    + {static} from_observation(o : Observation) : Features
+  }
+  class FeatureSmoother {
+    + alpha : float
+    + update(f : Features) : Features
+    + reset() : void
+  }
+  class Baseline <<dataclass>> {
+    + shoulder_width : float
+    + shoulder_y : float
+    + neck_gap : float
+    + distance_cm : float
+    + {static} from_samples(samples : list) : Baseline
+    + to_dict() : dict
+  }
+  class PostureAnalyzer {
+    + threshold : float
+    - slouching : bool
+    + analyze(f : Features) : PostureResult
+    + reset() : void
+  }
+  class PostureResult <<dataclass>> {
+    + state : str
+    + slouch_index : float
+    + posture_score : int
+    + kyphosis : float
+    + forward_head : float
+    + pelvic_tilt : float
+    + shoulder_drop_cm : float
+    + neck_angle : float
+  }
+  class NotificationManager {
+    + alert_threshold_mins : float
+    + too_close_seconds : float
+    + snoozed_until : float
+    + evaluate_posture_state(state : str, too_close : bool) : list
+    + snooze(minutes : float) : void
+    + reset_timer() : void
+  }
+  class DatabaseManager {
+    + db_path : str
+    - connection : Connection
+    + connect() : bool
+    + start_session() : int
+    + end_session(session_id : int) : void
+    + save_log(session_id : int, log : dict) : bool
+    + save_alert(session_id : int, alert_type : str, duration : int) : int
+    + get_stats(date_range : str) : dict
+    + export_csv(path : str) : int
+  }
+}
+
+EventEmitter <|-- EngineBridge
+EventEmitter <|-- CallDetector
+
+ElectronMain "1" *-- "1" EngineBridge : spawns >
+ElectronMain "1" *-- "0..1" CallDetector : uses >
+ReactDashboard ..> ElectronMain : <<IPC>>
+EngineBridge ..> Engine : <<stdin/stdout JSON>>
+
+Engine "1" *-- "1" DatabaseManager
+Engine "1" *-- "1" NotificationManager
+Engine "1" *-- "1" FeatureSmoother
+Engine "1" *-- "0..1" AIVisionEngine
+Engine "1" *-- "0..1" PostureAnalyzer
+PostureAnalyzer "1" o-- "1" Baseline : baseline
+
+AIVisionEngine ..> FrameAnalysis : <<create>>
+FrameAnalysis "1" *-- "0..1" Observation
+Features ..> Observation : <<use>>
+FeatureSmoother ..> Features : <<use>>
+Baseline ..> Features : <<use>>
+PostureAnalyzer ..> Features : <<use>>
+PostureAnalyzer ..> PostureResult : <<create>>
+@enduml

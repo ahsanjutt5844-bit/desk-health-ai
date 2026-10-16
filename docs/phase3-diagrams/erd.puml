@@ -1,0 +1,95 @@
+@startuml erd
+skinparam dpi 170
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam linetype polyline
+skinparam nodesep 60
+skinparam ranksep 70
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #333333
+  ArrowColor #333333
+  HeaderBackgroundColor #EEF3F1
+}
+hide circle
+hide empty methods
+
+entity "USER_PROFILE" as P {
+  * <u>profile_id</u> : INTEGER <<PK>>
+  --
+  * profile_name : VARCHAR
+  * created_at : DATETIME
+}
+entity "USER_SETTINGS" as S {
+  * <u>setting_id</u> : INTEGER <<PK>>
+  --
+  * profile_id : INTEGER <<FK, UNIQUE>>
+  * eye_strain_tracking : BOOLEAN
+  * camera_idx : INTEGER
+  * alert_timer_mins : INTEGER
+  * desktop_notifications : BOOLEAN
+  * posture_threshold : INTEGER
+  * min_distance_cm : INTEGER
+  * too_close_seconds : INTEGER
+  * target_fps : INTEGER
+  * auto_pause_calls : BOOLEAN
+  * launch_on_boot : BOOLEAN
+  focal_scale : REAL
+  calibration_json : TEXT
+}
+entity "DAILY_SUMMARY" as D {
+  * <u>summary_id</u> : INTEGER <<PK>>
+  --
+  * profile_id : INTEGER <<FK>>
+  * date : DATE
+  * total_active_seconds : INTEGER
+  * total_slouch_seconds : INTEGER
+  * total_resting_seconds : INTEGER
+  * total_close_seconds : INTEGER
+  * alerts_triggered : INTEGER
+  * score_sum : REAL
+  * score_samples : INTEGER
+  health_score : INTEGER
+  ..
+  UNIQUE (profile_id, date)
+}
+entity "APP_SESSIONS" as A {
+  * <u>session_id</u> : INTEGER <<PK>>
+  --
+  * profile_id : INTEGER <<FK>>
+  * start_time : DATETIME
+  end_time : DATETIME
+}
+entity "POSTURE_LOGS" as L {
+  * <u>log_id</u> : INTEGER <<PK>>
+  --
+  * session_id : INTEGER <<FK>>
+  * timestamp : DATETIME
+  * posture_state : VARCHAR(20)
+  posture_score : INTEGER
+  slouch_index : REAL
+  kyphosis : REAL
+  forward_head : REAL
+  pelvic_tilt : REAL
+  neck_angle : REAL
+  shoulder_angle : REAL
+  shoulder_drop_cm : REAL
+  screen_distance : REAL
+}
+entity "ALERT_HISTORY" as H {
+  * <u>alert_id</u> : INTEGER <<PK>>
+  --
+  * session_id : INTEGER <<FK>>
+  * timestamp : DATETIME
+  * alert_type : VARCHAR(30)
+  duration_seconds : INTEGER
+  user_action : VARCHAR(20)
+}
+
+P ||--|| S : configures
+P ||--o{ D : aggregates into
+P ||--o{ A : generates
+A ||--o{ L : records
+A ||--o{ H : triggers
+@enduml

@@ -1,0 +1,68 @@
+@startuml usecase
+left to right direction
+skinparam dpi 200
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #333333
+  ArrowColor #333333
+}
+skinparam actorStyle default
+skinparam rectangle {
+  BorderColor #333333
+  BackgroundColor #FAFAFA
+}
+
+actor "Desktop User" as User
+actor "<<system>>\nOS Native\nNotifications" as OS
+actor "<<system>>\nVideo Call App\n(Zoom / Teams)" as Call
+
+rectangle "DeskHealth AI" {
+  usecase "Calibrate Upright\nPosture" as UC1
+  usecase "Monitor Workspace\n(background tracking)" as UC2
+  usecase "Detect Slouching\n(shoulders down / forward)" as UC3
+  usecase "Measure Screen\nDistance" as UC4
+  usecase "Detect Resting\nState" as UC5
+  usecase "Send Posture\nAlert" as UC6
+  usecase "Send Too-Close\nAlert" as UC7
+  usecase "Release Camera\nDuring Video Call" as UC8
+  usecase "Pause / Resume\nMonitoring" as UC9
+  usecase "Snooze Alerts" as UC10
+  usecase "View Health\nDashboard" as UC11
+  usecase "View Analytics" as UC12
+  usecase "View Alert\nHistory" as UC13
+  usecase "Configure\nSettings" as UC14
+  usecase "Export Posture\nData (CSV)" as UC15
+  usecase "Quit Application" as UC16
+}
+
+User -- UC1
+User -- UC2
+User -- UC9
+User -- UC10
+User -- UC11
+User -- UC12
+User -- UC13
+User -- UC14
+User -- UC15
+User -- UC16
+
+' include: arrow from base use case to included use case
+UC2 ..> UC3 : <<include>>
+UC2 ..> UC4 : <<include>>
+' extend: arrow from extending use case to base use case
+' (written right-to-left only to control the layout; direction is unchanged)
+UC2 <.. UC5 : <<extend>>
+UC2 <.. UC8 : <<extend>>
+UC3 <.. UC6 : <<extend>>
+UC4 <.. UC7 : <<extend>>
+
+UC6 -- OS
+UC7 -- OS
+UC8 -- Call
+
+' layout only (invisible)
+@enduml
