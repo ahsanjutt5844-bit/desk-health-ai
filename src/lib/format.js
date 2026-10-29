@@ -12,6 +12,14 @@ export function mmss(seconds) {
   return `${m}m ${String(s % 60).padStart(2, '0')}s`;
 }
 
+// short duration: "45s", "12m 05s", "2h 03m"
+export function dur(seconds) {
+  const s = Math.max(0, Math.round(seconds || 0));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+  return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`;
+}
+
 export function clock(seconds) {
   const s = Math.max(0, Math.floor(seconds || 0));
   const h = Math.floor(s / 3600);

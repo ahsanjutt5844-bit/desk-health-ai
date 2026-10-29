@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useEngine } from '../lib/engine.jsx';
+import { useAuth } from './Auth.jsx';
 import { STATE_STYLE, clock } from '../lib/format.js';
 
 const NAV = [
@@ -11,6 +12,7 @@ const NAV = [
 
 export function Sidebar({ page, setPage }) {
   const { status, bridge } = useEngine();
+  const auth = useAuth();
   const st = STATE_STYLE[status.state] || STATE_STYLE.Starting;
   const tracking = !['Paused', 'NoCamera', 'Starting'].includes(status.state);
   return (
@@ -46,9 +48,11 @@ export function Sidebar({ page, setPage }) {
         })}
       </nav>
       <div className="flex items-end justify-between gap-2 border-t border-ink-700 px-6 py-4">
-        <div>
-          <div className="text-sm font-semibold text-mute-200">UCP — S26CS034</div>
-          <div className="mt-0.5 font-mono text-[10px] text-mute-400">v0.5.1 · BSCS FYP{bridge.isMock ? ' · demo data' : ''}</div>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-mute-200" title="Signed-in profile">👤 {auth?.status?.profile_name || 'Main User'}</div>
+          <button className="mt-0.5 text-xs font-semibold text-mute-400 hover:text-good" onClick={() => auth?.lock()} title="Lock the dashboard; tracking continues">🔒 Lock</button>
+          <div className="mt-1 text-sm font-semibold text-mute-200">UCP — S26CS034</div>
+          <div className="mt-0.5 font-mono text-[10px] text-mute-400">v0.6.0 · BSCS FYP{bridge.isMock ? ' · demo data' : ''}</div>
         </div>
         <button
           className="rounded-lg px-2 py-1 text-xs font-semibold text-mute-400 transition hover:bg-bad/10 hover:text-bad"

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useEngine } from '../lib/engine.jsx';
 import { Card, SettingRow, SliderRow, Toggle } from '../components/ui.jsx';
 import { useTheme } from '../lib/theme.jsx';
+import { useAuth } from '../components/Auth.jsx';
 
 export default function Settings({ onCalibrate }) {
   const { settings, setSettings, bridge } = useEngine();
@@ -13,7 +14,14 @@ export default function Settings({ onCalibrate }) {
 
   useEffect(() => { if (settings) setDraft(settings); }, [settings]);
   const [closeAction, setCloseAction] = useState('ask');
-  useEffect(() => { bridge.getPrefs?.().then((p) => p && setCloseAction(p.closeAction)); }, [bridge]);
+  const [autoLock, setAutoLock] = useState(5);
+  useEffect(() => {
+    bridge.getPrefs?.().then((p) => {
+      if (!p) return;
+      setCloseAction(p.closeAction);
+      if (p.autoLockMinutes != null) setAutoLock(p.autoLockMinutes);
+    });
+  }, [bridge]);
   const chooseClose = async (v) => { setCloseAction(v); await bridge.setPrefs({ closeAction: v }); };
   useEffect(() => {
     bridge.listCameras().then(setCameras).catch(() => setCameras([]));
@@ -73,7 +81,7 @@ export default function Settings({ onCalibrate }) {
             </SettingRow>
           </Card>
           <Card title="Thresholds">
-            <SliderRow title="Alert Timer" desc="Continuous slouching needed before a posture alert." value={draft.alert_timer_mins} min={1} max={10} unit=" min" onChange={set('alert_timer_mins')} />
+            <SliderRow title="Alert Timer" desc="Minutes of CONTINUOUS slouching before a posture alert. Sitting properly resets the timer (corrections shorter than 8 s are ignored)." value={draft.alert_timer_mins} min={1} max={10} unit=" min" onChange={set('alert_timer_mins')} />
             <SliderRow title="Slouch Threshold" desc="How much your shoulders may drop or move forward before it counts as slouching (35% ≈ 2 cm). Lower = stricter." value={draft.posture_threshold} min={20} max={60} unit="%" onChange={set('posture_threshold')} />
             <SliderRow title="Minimum Screen Distance" desc="Closer than this counts as too close." value={draft.min_distance_cm} min={35} max={75} unit=" cm" onChange={set('min_distance_cm')} />
             <SliderRow title="Too-close Delay" desc="How long you may stay too close before being notified." value={draft.too_close_seconds} min={2} max={30} unit=" s" onChange={set('too_close_seconds')} />
@@ -125,6 +133,7 @@ export default function Settings({ onCalibrate }) {
             </div>
             <p className="mt-3 text-xs text-mute-400">Applies immediately and is remembered on this computer.</p>
           </Card>
+          <SecurityCard autoLock={autoLock} setAutoLock={async (v) => { setAutoLock(v); await bridge.setPrefs({ autoLockMinutes: v }); }} />
           <Card title={<span className="text-info">When I close the window</span>}>
             <div className="grid gap-2" role="radiogroup" aria-label="Close button behaviour">
               {[
@@ -153,5 +162,58 @@ export default function Settings({ onCalibrate }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function SecurityCard({ autoLock, setAutoLock }) {
+  const { bridge } = useEngine();
+  const auth = useAuth();
+  const [oldPw, setOldPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [newPw2, setNewPw2] = useState('');
+  const [msg, setMsg] = useState(null);
+  const change = async (e) => {
+    e.preventDefault();
+    if (newPw.length < 6) return setMsg({ bad: true, text: 'The new password must be at least 6 characters long.' });
+    if (newPw !== newPw2) return setMsg({ bad: true, text: 'The two new passwords are not the same.' });
+    try {
+      await bridge.authChange(oldPw, newPw);
+      setOldPw(''); setNewPw(''); setNewPw2('');
+      setMsg({ bad: false, text: 'Password changed.' });
+    } catch (x) {
+      setMsg({ bad: true, text: String(x?.message || x).replace(/^Error invoking remote method '[^']+': (Error: )?/, '') });
+    }
+  };
+  const input = 'w-full rounded-xl border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-mute-200 outline-none focus:border-good';
+  return (
+    <Card title={<span className="text-info">Security</span>}>
+      <p className="text-xs leading-relaxed text-mute-400">
+        Profile: <b className="text-mute-200">{auth?.status?.profile_name}</b>. The password is stored only as a salted
+        PBKDF2-SHA256 hash on this computer. While locked, tracking and alerts continue, but the dashboard, history,
+        settings and camera preview need the password.
+      </p>
+      <label htmlFor="auto-lock" className="mt-4 flex items-center justify-between gap-3 text-sm text-mute-200">
+        Lock automatically when hidden for
+        <select id="auto-lock" value={autoLock} onChange={(e) => setAutoLock(Number(e.target.value))}
+          className="rounded-lg border border-ink-600 bg-ink-900 px-2 py-1.5 text-sm text-mute-200">
+          <option value={1}>1 minute</option>
+          <option value={5}>5 minutes</option>
+          <option value={15}>15 minutes</option>
+          <option value={30}>30 minutes</option>
+          <option value={0}>Never</option>
+        </select>
+      </label>
+      <form onSubmit={change} className="mt-4 grid gap-2">
+        <div className="label">Change password</div>
+        <input id="pw-old" type="password" placeholder="Current password" className={input} value={oldPw} onChange={(e) => setOldPw(e.target.value)} autoComplete="current-password" />
+        <input id="pw-new" type="password" placeholder="New password (6+ characters)" className={input} value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" />
+        <input id="pw-new2" type="password" placeholder="Repeat new password" className={input} value={newPw2} onChange={(e) => setNewPw2(e.target.value)} autoComplete="new-password" />
+        {msg && <p className={`text-xs ${msg.bad ? 'text-bad' : 'text-good'}`}>{msg.text}</p>}
+        <div className="flex gap-3">
+          <button className="btn btn-primary" disabled={!oldPw || !newPw}>Change password</button>
+          <button type="button" className="btn" onClick={() => auth?.lock()}>🔒 Lock now</button>
+        </div>
+      </form>
+    </Card>
   );
 }

@@ -21,7 +21,10 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS user_profile (
     profile_id    INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_name  VARCHAR NOT NULL DEFAULT 'Main User',
-    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    password_hash TEXT,          -- PBKDF2-HMAC-SHA256, never the password itself
+    password_salt TEXT,
+    password_iter INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS user_settings (
@@ -105,6 +108,15 @@ DEFAULT_SETTINGS = {
 }
 BOOL_SETTINGS = {"eye_strain_tracking", "desktop_notifications", "auto_pause_calls", "launch_on_boot"}
 EDITABLE_SETTINGS = set(DEFAULT_SETTINGS)
+# allowed range of every numeric setting (values from the UI are clamped)
+SETTING_RANGES = {
+    "camera_idx": (0, 9), "alert_timer_mins": (1, 10), "posture_threshold": (20, 60),
+    "min_distance_cm": (35, 75), "too_close_seconds": (2, 30), "target_fps": (1, 3),
+}
+# columns added after the first release; older databases are upgraded on start
+MIGRATIONS = {
+    "user_profile": [("password_hash", "TEXT"), ("password_salt", "TEXT"), ("password_iter", "INTEGER")],
+}
 
 
 def _now() -> str:
@@ -126,6 +138,11 @@ class DatabaseManager:
         with self.lock:
             self.connection.execute("PRAGMA journal_mode=WAL")
             self.connection.executescript(SCHEMA)
+            for table, cols in MIGRATIONS.items():
+                have = {r["name"] for r in self.connection.execute(f"PRAGMA table_info({table})")}
+                for col, typ in cols:
+                    if col not in have:
+                        self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
             cur = self.connection.execute("SELECT profile_id FROM user_profile LIMIT 1")
             row = cur.fetchone()
             if row is None:
@@ -166,7 +183,19 @@ class DatabaseManager:
         return out
 
     def update_settings(self, values: dict) -> bool:
-        clean = {k: v for k, v in values.items() if k in EDITABLE_SETTINGS}
+        clean = {}
+        for k, v in (values or {}).items():
+            if k not in EDITABLE_SETTINGS:
+                continue                      # unknown keys are ignored
+            if k in BOOL_SETTINGS:
+                clean[k] = bool(v)
+            else:
+                try:
+                    num = int(v)
+                except (TypeError, ValueError):
+                    continue                  # invalid value: keep the old one
+                lo, hi = SETTING_RANGES[k]
+                clean[k] = max(lo, min(hi, num))
         if not clean:
             return False
         cols = ", ".join(f"{k}=?" for k in clean)
@@ -188,6 +217,16 @@ class DatabaseManager:
         if focal_scale:
             self._x("UPDATE user_settings SET focal_scale=? WHERE profile_id=?",
                     (focal_scale, self.profile_id))
+
+    # ------------------------------------------------------------------ auth
+    def get_auth(self) -> dict:
+        return self._q("SELECT profile_name, password_hash, password_salt, password_iter "
+                       "FROM user_profile WHERE profile_id=?", (self.profile_id,))[0]
+
+    def set_auth(self, name, salt, digest, iterations):
+        self._x("UPDATE user_profile SET profile_name=?, password_salt=?, password_hash=?, "
+                "password_iter=? WHERE profile_id=?",
+                (name, salt, digest, iterations, self.profile_id))
 
     # --------------------------------------------------------------- sessions
     def start_session(self) -> int:

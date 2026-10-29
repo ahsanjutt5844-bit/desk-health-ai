@@ -39,7 +39,15 @@ looking down at a phone) is not slouching.
 Shoulder drop is measured **independent of distance**: moving toward or away from the camera scales the
 image about its centre, so the drop is compared with where the shoulders *should* appear at the new
 distance, and the small drop caused by reclining around the hips is removed.
-**Resting:** leaning back counts as Resting (alerts paused, US-07) only with **upright shoulders**.
+**Resting:** leaning back in the chair to rest pauses alerts (US-07). It counts as Resting when the
+shoulders move **at least 12 cm back** from the calibrated position and drop no more than that recline
+explains (plus some hip slide, as people slide forward on the seat when they lean back). Slumping into
+the chair (sinking down without really leaning back) is **Slouching**.
+
+**Alerts use continuous slouching:** with the alert timer at 3 min, a posture notification appears only
+after 3 minutes of slouching *in a row*. Sitting properly resets the timer; corrections shorter than 8 s
+are ignored so that camera flicker cannot reset it. Separate slouches are never added up for the alert.
+The dashboard shows both the current continuous slouch and the total slouch time of the day.
 Slumping back (shoulders drop while moving away from the screen) is **Slouching**.
 
 **Screen distance:** pinhole camera model, `distance = focal_px × real_size / size_px`, averaged over the
@@ -52,7 +60,28 @@ Code: `engine/posture.py`, `engine/distance.py`. Tests: `engine/tests/test_postu
 
 ---
 
-## 2. Architecture (matches SDS Phase II Figure 1)
+## 2. Security layer
+
+* **Local profile with a password.** On first start the user creates a profile (name + password).
+  The dashboard, history, settings, CSV export and camera preview open only after the password is
+  entered; posture tracking and alerts keep running while the app is locked.
+* The password is never stored: the database keeps a **PBKDF2-HMAC-SHA256 hash** (600,000 iterations,
+  random 16-byte salt) and checks it with a constant-time comparison (`engine/auth.py`).
+* **Lock-out:** after 5 wrong passwords the login waits 30 s, doubling up to 5 min.
+* **Auto-lock** when the window has been hidden for 5 min (configurable), plus **Lock** buttons.
+* The Python engine refuses every data command while locked, so the lock cannot be bypassed from the UI.
+* Electron hardening: context isolation + sandbox, IPC only from the app's own page, navigation blocked,
+  only the camera permission allowed, developer tools disabled in the installed app, every setting
+  range-checked before it is saved.
+* **Forgot password:** the password cannot be recovered (it is not stored); the user can erase this
+  computer's DeskHealth data by typing RESET and create a new profile.
+
+**Where is the data saved without an online login?** In a SQLite file on the user's own computer
+(`%APPDATA%\DeskHealth AI\deskhealth.db`). Windows already separates users: each Windows account has
+its own AppData folder, so each person who logs in to Windows gets their own DeskHealth database. Inside
+it, the data belongs to the local profile (`USER_PROFILE` row) created on first start.
+
+## 3. Architecture (matches SDS Phase II Figure 1)
 
 ```
 React.js UI (src/)  ──IPC──►  Electron main (electron/)  ──stdin/stdout JSON──►  Python AI engine (engine/)
@@ -81,7 +110,7 @@ IPC channels (SDS §6): `ipc-get-posture-stats`, `ipc-update-settings`, `ipc-tri
 
 ---
 
-## 3. Running it (Windows)
+## 4. Running it (Windows)
 
 Requirements: **Node.js 20+**, **Python 3.10–3.12** (64-bit), and a webcam.
 
@@ -127,7 +156,7 @@ pelvic component, plus the alert timers, too-close cooldown and snooze.
 
 ---
 
-## 4. Building the installer (.exe)
+## 5. Building the installer (.exe)
 
 ```powershell
 npm run dist
@@ -140,7 +169,7 @@ The MediaPipe models (`engine/models/*.task`) ship with the app, so it works ful
 
 ---
 
-## 5. Requirement coverage
+## 6. Requirement coverage
 
 | Requirement | Where |
 |---|---|
@@ -159,7 +188,7 @@ The MediaPipe models (`engine/models/*.task`) ship with the app, so it works ful
 | TD-07 export CSV | Settings → Data & maintenance |
 | TD-08 daily score | `daily_summary.health_score` updated continuously |
 
-## 6. Project structure
+## 7. Project structure
 ```
 electron/   main.js (tray, notifications, IPC) · preload.js · engine-bridge.js · call-detector.js
 engine/     main.py (engine loop/IPC) · vision.py · posture.py · distance.py · notifier.py · database.py

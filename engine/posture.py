@@ -63,6 +63,15 @@ SHOULDER_GATE = 0.30
 AVG_SHOULDER_WIDTH_CM = 38.0
 AVG_TORSO_LENGTH_CM = 50.0
 
+# Resting = leaning BACK in the chair. The shoulders must move at least this
+# far back from the calibrated position (a deliberate recline; slumping moves
+# them back much less) ...
+RECLINE_MIN_BACK_CM = 12.0
+# ... and may drop at most this fraction of the backward movement on top of
+# the drop the recline itself causes (people slide their hips forward a bit
+# when they lean back to rest).
+RECLINE_SLIDE_ALLOWANCE = 0.35
+
 
 def clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, v))
@@ -205,7 +214,7 @@ class Baseline:
 class PostureResult:
     state: str                    # 'Healthy' | 'Slouching' | 'Resting'
     slouch_index: float           # 0..1
-    posture_score: int            # 0..100 (100 = perfect)
+    posture_score: Optional[int]  # 0..100 (100 = perfect); None while resting
     kyphosis: float               # 0..1 shoulder component
     forward_head: float           # 0..1
     pelvic_tilt: float            # 0..1
@@ -259,6 +268,7 @@ class PostureAnalyzer:
         # Reclining rotates the upper body around the hips, which lowers the
         # shoulders by T*(1 - cos(angle)) even with a straight back. Remove only
         # that geometric part; any extra drop is slumping (= slouching).
+        back_cm = 0.0
         if forward_ratio < 0:
             d0 = b.distance_cm or 60.0
             back_cm = d0 * (b.shoulder_width / sw - 1.0)
@@ -316,6 +326,18 @@ class PostureAnalyzer:
             math.atan2(shoulder_forward_cm, AVG_TORSO_LENGTH_CM - shoulder_drop_cm)
         )
 
+        # ---- Resting: leaning back in the chair to rest (US-07) ------------
+        # A deliberate recline moves the shoulders far back (>= 12 cm). The
+        # shoulders may drop as much as the recline explains plus a bit of
+        # hip slide. Slumping into the chair moves them back much less while
+        # they drop a lot - that stays slouching.
+        excess_drop_cm = max(0.0, drop_ratio) * AVG_SHOULDER_WIDTH_CM
+        resting = (back_cm >= RECLINE_MIN_BACK_CM
+                   and excess_drop_cm <= RECLINE_SLIDE_ALLOWANCE * back_cm
+                   and forward_head < 0.6)
+        if resting and b.distance_cm and f.distance_cm:
+            resting = f.distance_cm >= b.distance_cm * 1.10   # the face moved back too
+
         # ---- Classification ----------------------------------------------
         # Shoulders down or forward = slouching (the shoulder component alone
         # reaches the threshold). The full formula can also trigger it when
@@ -323,27 +345,18 @@ class PostureAnalyzer:
         t = self.threshold
         enter = kyphosis >= t or (index >= t and kyphosis >= SHOULDER_GATE)
         stay = kyphosis >= t - 0.08 or (index >= t - 0.07 and kyphosis >= SHOULDER_GATE - 0.05)
-        self._slouching = stay if self._slouching else enter
-
-        # ---- Resting: leaned back in the chair with an UPRIGHT body (US-07)
-        # Sliding down / slumping back also moves the user away from the
-        # screen, but the shoulders drop - that is slouching, not resting.
-        leaned_back = forward_ratio <= -0.10
-        if leaned_back and b.distance_cm and f.distance_cm:
-            leaned_back = f.distance_cm >= b.distance_cm * 1.10
-        upright = s_drop == 0.0 and forward_head < 0.5 and pelvic < 0.3
-
-        if self._slouching:
-            state = "Slouching"
-        elif leaned_back and upright:
+        if resting:
             state = "Resting"
+            self._slouching = False
         else:
-            state = "Healthy"
+            self._slouching = stay if self._slouching else enter
+            state = "Slouching" if self._slouching else "Healthy"
 
         return PostureResult(
             state=state,
             slouch_index=index,
-            posture_score=int(round(100 * (1.0 - index))),
+            # no score while resting: leaning back is not bad posture
+            posture_score=None if state == "Resting" else int(round(100 * (1.0 - index))),
             kyphosis=kyphosis,
             forward_head=forward_head,
             pelvic_tilt=pelvic,
@@ -359,5 +372,6 @@ class PostureAnalyzer:
                 "s_forward": round(s_forward, 3),
                 "s_round": round(s_round, 3),
                 "pelvic_source": pelvic_source,
+                "back_cm": round(back_cm, 1),
             },
         )

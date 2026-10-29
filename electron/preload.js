@@ -28,6 +28,13 @@ contextBridge.exposeInMainWorld('deskHealth', {
   getPrefs: () => ipcRenderer.invoke('ipc-get-prefs'),
   setPrefs: (p) => ipcRenderer.invoke('ipc-set-prefs', p),
   quit: () => ipcRenderer.send('ipc-quit'),
+  authStatus: () => ipcRenderer.invoke('ipc-auth-status'),
+  authSetup: (name, password) => ipcRenderer.invoke('ipc-auth-setup', { name, password }),
+  authLogin: (password) => ipcRenderer.invoke('ipc-auth-login', { password }),
+  authLock: () => ipcRenderer.invoke('ipc-auth-lock'),
+  authChange: (oldPassword, newPassword) => ipcRenderer.invoke('ipc-auth-change', { old: oldPassword, new: newPassword }),
+  authReset: (confirm) => ipcRenderer.invoke('ipc-auth-reset', { confirm }),
+  onLocked: on('auth-locked'),
 
   onStatus: on('engine-status'),
   onFrame: on('engine-frame'),

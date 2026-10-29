@@ -11,12 +11,15 @@ import './index.css';
 import App from './App.jsx';
 import { EngineProvider } from './lib/engine.jsx';
 import { ThemeProvider } from './lib/theme.jsx';
+import { AuthGate } from './components/Auth.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ThemeProvider>
       <EngineProvider>
-        <App />
+        <AuthGate>
+          <App />
+        </AuthGate>
       </EngineProvider>
     </ThemeProvider>
   </React.StrictMode>,

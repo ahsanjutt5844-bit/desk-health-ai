@@ -23,6 +23,7 @@ import time
 import traceback
 from datetime import date
 
+from auth import AuthError, AuthManager
 from database import DatabaseManager
 from notifier import NotificationManager
 from posture import Baseline, Features, FeatureSmoother, PostureAnalyzer
@@ -52,6 +53,7 @@ class Engine:
         self.db = DatabaseManager(db_path)
         self.db.connect()
         self.settings = self.db.get_settings()
+        self.auth = AuthManager(self.db)
         self.commands: queue.Queue = queue.Queue()
         self.running = True
 
@@ -79,6 +81,7 @@ class Engine:
         self.failed_opens = 0
         self.failed_reads = 0
         self.dark_notified = 0.0
+        self._today_saved = None
 
     # ----------------------------------------------------------- helpers
     def _load_calibration(self):
@@ -114,12 +117,45 @@ class Engine:
             data = self.dispatch(cmd, args)
             if mid is not None:
                 emit({"type": "response", "id": mid, "ok": True, "data": data})
+        except (AuthError, PermissionError) as e:
+            if mid is not None:
+                emit({"type": "response", "id": mid, "ok": False, "error": str(e)})
+            return
         except Exception as e:  # never crash the engine on a bad command
             log(str(e) if isinstance(e, (ValueError, KeyError)) else traceback.format_exc(), "error")
             if mid is not None:
                 emit({"type": "response", "id": mid, "ok": False, "error": str(e)})
 
+    # commands that read or change the user's data need an unlocked profile
+    PROTECTED = {"get_stats", "get_settings", "update_settings", "reset_settings", "calibrate",
+                 "clear_calibration", "set_preview", "list_cameras", "export_csv", "clear_history"}
+
     def dispatch(self, cmd: str, a: dict):
+        if cmd in self.PROTECTED:
+            self.auth.require_unlocked()
+        if cmd == "auth_status":
+            return self.auth.status()
+        if cmd == "auth_setup":
+            return self.auth.setup(a.get("name"), a.get("password"))
+        if cmd == "auth_login":
+            return self.auth.login(a.get("password"))
+        if cmd == "auth_lock":
+            self.preview = False
+            return self.auth.lock()
+        if cmd == "auth_change":
+            return self.auth.change(a.get("old"), a.get("new"))
+        if cmd == "auth_reset":
+            if a.get("confirm") != "RESET":
+                raise AuthError("Type RESET to confirm.")
+            self.preview = False
+            self.pending.clear()
+            self.session_id = None
+            self._today_saved = None
+            self.analyzer = None
+            status = self.auth.reset_everything()
+            self.settings = self.db.get_settings()
+            self._apply_settings()
+            return status
         if cmd == "get_stats":
             self._flush()
             return self.db.get_stats(a.get("date_range", "weekly"))
@@ -190,6 +226,7 @@ class Engine:
             self.db.clear_history()
             self.pending.clear()
             self.session_id = None
+            self._today_saved = None
             return True
         if cmd == "get_status":
             return self.status_dict()
@@ -225,7 +262,11 @@ class Engine:
             "distance_cm": round(self.last_distance, 1) if self.last_distance else None,
             "too_close": too_close,
             "snoozed_until": self.notifier.snoozed_until if self.notifier.is_snoozed else None,
+            # continuous slouch streak (what the alert timer counts) ...
             "slouch_seconds": int(self.notifier.slouch_seconds()),
+            "alert_after_seconds": int(self.settings["alert_timer_mins"] * 60),
+            # ... and today's summed totals
+            "today": self.today_totals(),
             "session_id": self.session_id,
         }
 
@@ -249,6 +290,21 @@ class Engine:
             self.db.add_time(day, **acc)
         self.pending.clear()
         self.last_flush = time.time()
+        self._today_saved = None          # re-read today's totals on next status
+
+    def today_totals(self) -> dict:
+        """Today's summed times (saved in SQLite + not yet flushed), in seconds."""
+        day = date.today().isoformat()
+        if self._today_saved is None or self._today_saved[0] != day:
+            self._today_saved = (day, self.db.fetch_summary(day))
+        saved = self._today_saved[1]
+        acc = self.pending.get(day, {})
+        return {
+            "active": int(saved.get("total_active_seconds", 0) + acc.get("active", 0)),
+            "slouch": int(saved.get("total_slouch_seconds", 0) + acc.get("slouch", 0)),
+            "resting": int(saved.get("total_resting_seconds", 0) + acc.get("resting", 0)),
+            "close": int(saved.get("total_close_seconds", 0) + acc.get("close", 0)),
+        }
 
     def _accumulate(self, dt: float, state: str, too_close: bool, score):
         day = date.today().isoformat()
@@ -260,7 +316,7 @@ class Engine:
             acc["slouch"] += dt
         if state == "Resting":
             acc["resting"] += dt
-        if too_close:
+        if too_close and state in ("Healthy", "Slouching", "Resting"):
             acc["close"] += dt
         if score is not None and state in ("Healthy", "Slouching"):
             acc["score_sum"] += score
@@ -378,7 +434,7 @@ class Engine:
             self._flush()
 
         self.emit_status()
-        if self.preview:
+        if self.preview and self.auth.unlocked:
             jpg = self.vision.render_preview(frame, analysis, state)
             emit({"type": "frame", "jpeg": base64.b64encode(jpg).decode("ascii")})
         del frame   # frame is never written anywhere

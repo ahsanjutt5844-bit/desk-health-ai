@@ -36,7 +36,10 @@ def wait_for(pred, timeout, what):
 
 
 wait_for(lambda e: e["type"] == "ready", 120, "engine did not start")
+# the engine refuses data commands until a profile password exists / is entered
+proc.stdin.write('{"id":0,"cmd":"auth_setup","args":{"name":"CI","password":"ci-smoke-test"}}\n')
 proc.stdin.write('{"id":1,"cmd":"calibrate","args":{}}\n'); proc.stdin.flush()
+wait_for(lambda e: e["type"] == "response" and e.get("id") == 0 and e.get("ok"), 60, "profile setup failed")
 wait_for(lambda e: e["type"] == "calibration" and e.get("status") == "done", 180, "calibration did not finish")
 wait_for(lambda e: e["type"] == "status" and e.get("state") == "Healthy", 60, "posture not classified")
 proc.stdin.write('{"id":2,"cmd":"shutdown"}\n'); proc.stdin.flush()

@@ -133,8 +133,8 @@ def test_slumping_back_is_slouching_not_resting():
 
 
 def test_moving_back_hides_no_drop():
-    # body moved back 15 cm with shoulders dropped 5 cm: the drop must still count
-    r = analyze(move_z=15, shoulder_drop=5)
+    # body moved back 8 cm (not a recline) with shoulders dropped 4 cm: still slouching
+    r = analyze(move_z=8, shoulder_drop=4)
     assert r.state == "Slouching", r
 
 
@@ -154,6 +154,25 @@ def test_neck_only_is_not_slouching():
 def test_lean_back_is_resting():
     r = analyze(trunk_lean=-18, move_z=0)
     assert r.state == "Resting", r
+
+
+def test_recline_to_rest_with_hips_slid_is_resting():
+    # user report (photo): leaning far back to rest, hips slide forward on the
+    # seat and the head stays upright - this is Resting, not slouching
+    r = analyze(trunk_lean=-25, neck_flex=12, slide_down=3)
+    assert r.state == "Resting", r
+    assert r.posture_score is None
+
+
+def test_deep_recline_hands_behind_head_is_resting():
+    r = analyze(trunk_lean=-30, neck_flex=15, slide_down=4, shoulder_drop=-1.5)
+    assert r.state == "Resting", r
+
+
+def test_deep_slump_is_still_slouching():
+    # leaning back but sinking far more than a recline explains
+    r = analyze(trunk_lean=-20, shoulder_drop=4, slide_down=6)
+    assert r.state == "Slouching", r
 
 
 def test_sliding_down_in_chair_raises_pelvic_component():
@@ -192,6 +211,25 @@ def test_notifier_short_correction_keeps_timer_good_posture_resets():
     assert n.slouch_start == 0
     n.evaluate_posture_state("Healthy", False, 20)       # sat straight > grace
     assert n.slouch_start is None
+
+
+def test_notifier_does_not_sum_separate_slouches():
+    # 2 min slouch + 30 s sitting properly + 2 min slouch = 4 min in total, but
+    # never 3 min CONTINUOUSLY -> no alert (alerts need continuous slouching)
+    n = NotificationManager(alert_threshold_mins=3)
+    t = 0
+    alerts = []
+    for _ in range(120):
+        alerts += n.evaluate_posture_state("Slouching", False, t); t += 1
+    for _ in range(30):
+        alerts += n.evaluate_posture_state("Healthy", False, t); t += 1
+    for _ in range(120):
+        alerts += n.evaluate_posture_state("Slouching", False, t); t += 1
+    assert alerts == []
+    # ...but continuing to slouch until 3 continuous minutes does alert
+    for _ in range(61):
+        alerts += n.evaluate_posture_state("Slouching", False, t); t += 1
+    assert len(alerts) == 1 and alerts[0]["duration_seconds"] >= 180
 
 
 def test_too_close_alert_and_cooldown():

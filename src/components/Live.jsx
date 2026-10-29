@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useEngine } from '../lib/engine.jsx';
-import { STATE_STYLE, mmss } from '../lib/format.js';
+import { STATE_STYLE, dur, mmss } from '../lib/format.js';
 import PostureFigure from './PostureFigure.jsx';
-import { Bar, Card } from './ui.jsx';
+import { Bar, Card, Toggle } from './ui.jsx';
 import { useTheme } from '../lib/theme.jsx';
 
 // ---------------------------------------------------------------- posture
@@ -58,13 +58,15 @@ export function LivePosture({ onCalibrate }) {
             <>
               <div>
                 <div className="label">Posture score</div>
-                <div className={`font-mono text-[44px] font-bold leading-tight ${p ? (p.posture_score >= 70 ? 'text-good' : p.posture_score >= 45 ? 'text-warn' : 'text-bad') : 'text-mute-400'}`}>
-                  {p ? `${p.posture_score}%` : '—'}
-                </div>
-                {state === 'Slouching' && (
-                  <div className="text-xs text-bad">Slouching for {mmss(status.slouch_seconds)} · alert at {alertMins} min</div>
+                {state === 'Resting' ? (
+                  <div className="font-mono text-[30px] font-bold leading-tight text-warn">Resting<div className="font-sans text-xs font-medium text-mute-400">Leaning back · alerts paused</div></div>
+                ) : (
+                  <div className={`font-mono text-[44px] font-bold leading-tight ${p?.posture_score != null ? (p.posture_score >= 70 ? 'text-good' : p.posture_score >= 45 ? 'text-warn' : 'text-bad') : 'text-mute-400'}`}>
+                    {p?.posture_score != null ? `${p.posture_score}%` : '—'}
+                  </div>
                 )}
               </div>
+              <SlouchTimer status={status} alertMins={alertMins} />
               <div className="mt-3 space-y-3">
                 <Component name="Shoulders — rounded / dropped" weight="50%" value={p?.kyphosis} />
                 <Component name="Forward head" weight="30%" value={p?.forward_head} />
@@ -80,6 +82,27 @@ export function LivePosture({ onCalibrate }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+// Continuous slouch streak (what the alert counts) and today's summed total
+function SlouchTimer({ status, alertMins }) {
+  const streak = status.slouch_seconds || 0;
+  const limit = status.alert_after_seconds || alertMins * 60;
+  const total = status.today?.slouch;
+  return (
+    <div className="mt-3 rounded-xl border border-ink-700 bg-ink-900 px-3 py-2.5">
+      <div className="flex items-baseline justify-between text-xs">
+        <span className="text-mute-300">Continuous slouching</span>
+        <span className={`font-mono font-bold ${streak ? 'text-bad' : 'text-mute-400'}`}>{mmss(streak)} <span className="font-normal text-mute-400">/ {alertMins} min</span></span>
+      </div>
+      <div className="mt-1.5"><Bar value={streak / limit} color="bg-bad" /></div>
+      <div className="mt-2 flex items-baseline justify-between text-xs">
+        <span className="text-mute-300">Total slouch time today</span>
+        <span className="font-mono font-bold text-mute-200">{total != null ? dur(total) : '—'}</span>
+      </div>
+      <p className="mt-1.5 text-[10.5px] leading-snug text-mute-400">The alert needs {alertMins} min of slouching in a row; sitting properly resets the timer.</p>
+    </div>
   );
 }
 
@@ -108,7 +131,12 @@ function Metric({ label, value, unit }) {
 
 // ---------------------------------------------------------------- distance
 export function DistancePanel() {
-  const { status, settings } = useEngine();
+  const { status, settings, setSettings, bridge } = useEngine();
+  const [saving, setSaving] = useState(false);
+  const setEnabled = async (v) => {
+    setSaving(true);
+    try { setSettings(await bridge.updateSettings({ eye_strain_tracking: v })); } finally { setSaving(false); }
+  };
   const { c } = useTheme();
   const min = settings?.min_distance_cm ?? 50;
   const d = status.distance_cm;
@@ -118,9 +146,18 @@ export function DistancePanel() {
   const pos = (v) => `${((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * 100}%`;
   const close = status.too_close;
   return (
-    <Card title="Screen distance" subtitle="Eye strain · face-to-screen distance from iris size">
+    <Card
+      title="Screen distance"
+      subtitle="Eye strain · face-to-screen distance from iris size"
+      right={(
+        <label className="flex shrink-0 items-center gap-2 text-xs font-semibold text-mute-300">
+          {enabled ? 'On' : 'Off'}
+          <Toggle checked={enabled} onChange={setEnabled} disabled={saving || !settings} />
+        </label>
+      )}
+    >
       {!enabled ? (
-        <div className="py-6 text-sm text-mute-400">Eye strain tracking is turned off in Settings.</div>
+        <div className="py-6 text-sm leading-relaxed text-mute-400">Eye strain tracking is off: no distance checks and no "too close" alerts. Turn it on with the switch above (also in Settings).</div>
       ) : (
         <>
           <div className="flex items-end gap-3">

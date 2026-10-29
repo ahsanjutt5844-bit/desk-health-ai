@@ -15,6 +15,8 @@ let settings = {
   auto_pause_calls: true, launch_on_boot: false, focal_scale: null, calibrated: true,
 };
 let paused = false;
+const auth = { has_password: true, unlocked: false, profile_name: 'Ahsan' };
+let authPw = 'demo123';
 let snoozedUntil = null;
 
 function day(offset) {
@@ -76,6 +78,8 @@ setInterval(() => {
     too_close: s.dist < settings.min_distance_cm,
     snoozed_until: snoozedUntil,
     slouch_seconds: s.state === 'Slouching' ? Math.round((t % 8) * 20) : 0,
+    alert_after_seconds: settings.alert_timer_mins * 60,
+    today: { active: 19260 + Math.round(t), slouch: 7200 + (s.state === 'Slouching' ? Math.round(t % 8) : 0), resting: 1380, close: 600 },
     posture: settings.calibrated ? {
       state: s.state, slouch_index: index, posture_score: Math.round(100 * (1 - index)),
       kyphosis: s.k, forward_head: s.f, pelvic_tilt: s.p, shoulder_drop_cm: s.drop,
@@ -128,6 +132,20 @@ export const mockBridge = {
   async getPrefs() { return { closeAction: 'ask' }; },
   async setPrefs(p) { return { closeAction: p.closeAction }; },
   quit() {},
+  // demo profile (browser preview only): password "demo123"
+  async authStatus() { return { ...auth, locked_for: 0 }; },
+  async authSetup(name, password) {
+    if (!password || password.length < 6) throw new Error('The password must be 6 to 128 characters long.');
+    Object.assign(auth, { has_password: true, unlocked: true, profile_name: name }); authPw = password; return { ...auth };
+  },
+  async authLogin(password) {
+    if (password !== authPw) throw new Error('Wrong password. 4 attempts left.');
+    auth.unlocked = true; return { ...auth };
+  },
+  async authLock() { auth.unlocked = false; emit('auth-locked'); return { ...auth }; },
+  async authChange(o, n) { if (o !== authPw) throw new Error('The current password is not correct.'); authPw = n; return { ...auth }; },
+  async authReset() { Object.assign(auth, { has_password: false, unlocked: false, profile_name: 'Main User' }); return { ...auth }; },
+  onLocked: on('auth-locked'),
   onStatus: on('engine-status'),
   onFrame: on('engine-frame'),
   onAlert: on('engine-alert'),

@@ -2,7 +2,7 @@
 // Hosts the React dashboard, runs in the system tray, spawns the Python AI
 // engine, routes IPC and shows native OS notifications.
 const {
-  app, BrowserWindow, Tray, Menu, Notification, ipcMain, dialog, nativeImage, shell,
+  app, BrowserWindow, Tray, Menu, Notification, ipcMain, dialog, nativeImage, shell, session,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -21,11 +21,13 @@ let lastStatus = { state: 'Starting' };
 let settings = {};
 let lastAlertId = null;
 let shutdownDone = false;
+let unlocked = false;          // profile unlocked in the engine (security layer)
+let autoLockTimer = null;
 
 // Small UI preferences kept by Electron (not in the engine database)
 //   closeAction: 'ask' | 'tray' | 'quit'   - what the window's X button does
 const PREFS_FILE = () => path.join(app.getPath('userData'), 'prefs.json');
-let prefs = { closeAction: 'ask', trayHintShown: false };
+let prefs = { closeAction: 'ask', trayHintShown: false, autoLockMinutes: 5 };
 function loadPrefs() {
   try { prefs = { ...prefs, ...JSON.parse(fs.readFileSync(PREFS_FILE(), 'utf8')) }; } catch { /* first run */ }
 }
@@ -55,10 +57,14 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      devTools: !app.isPackaged,        // no developer tools in the installed app
     },
   });
   if (DEV_URL) win.loadURL(DEV_URL);
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  // the window may only show the app itself
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.on('show', cancelAutoLock);
 
   win.once('ready-to-show', () => {
     if (!process.argv.includes('--hidden')) win.show();
@@ -95,9 +101,31 @@ function createWindow() {
   });
 }
 
+// Lock the dashboard when it has been hidden for a while (Settings -> Security)
+function scheduleAutoLock() {
+  cancelAutoLock();
+  const mins = Number(prefs.autoLockMinutes) || 0;
+  if (!mins || !unlocked) return;
+  autoLockTimer = setTimeout(() => lockProfile(), mins * 60 * 1000);
+}
+
+function cancelAutoLock() {
+  if (autoLockTimer) clearTimeout(autoLockTimer);
+  autoLockTimer = null;
+}
+
+async function lockProfile() {
+  cancelAutoLock();
+  unlocked = false;
+  try { await engine.request('auth_lock'); } catch { /* engine restarting */ }
+  send('auth-locked');
+  buildTrayMenu();
+}
+
 function hideToTray() {
   win.hide();
   setPreview(false);
+  scheduleAutoLock();
   if (!prefs.trayHintShown && Notification.isSupported()) {
     new Notification({
       title: 'DeskHealth AI is still running',
@@ -162,6 +190,7 @@ function buildTrayMenu() {
       { label: 'Cancel snooze', click: () => engine.send('unsnooze') },
     ] },
     { label: 'Recalibrate posture', click: () => showWindow('calibrate') },
+    { label: 'Lock DeskHealth', enabled: unlocked, click: lockProfile },
     { type: 'separator' },
     { label: 'Quit DeskHealth AI', click: quitApp },
   ]));
@@ -205,6 +234,8 @@ function startEngine() {
   engine = new EngineBridge(app, dbPath);
   engine.on('ready', (m) => {
     settings = m.settings;
+    unlocked = false;                 // a (re)started engine is always locked
+    send('auth-locked');
     applyAutoPause();
     applyLoginItem();
     send('engine-ready', m);
@@ -215,7 +246,7 @@ function startEngine() {
     send('engine-status', s);
     if (changed) buildTrayMenu();
   });
-  engine.on('frame', (f) => send('engine-frame', f.jpeg));
+  engine.on('frame', (f) => { if (unlocked) send('engine-frame', f.jpeg); });
   engine.on('calibration', (c) => send('engine-calibration', c));
   engine.on('alert', showNotification);
   engine.on('camera_error', (e) => send('engine-camera-error', e));
@@ -249,7 +280,27 @@ function applyLoginItem() {
   app.setLoginItemSettings({ openAtLogin: !!settings.launch_on_boot, args: ['--hidden'] });
 }
 
-const handle = (channel, fn) => ipcMain.handle(channel, async (_e, payload) => fn(payload || {}));
+// Only accept IPC from this app's own page (not from any other content)
+function trustedSender(e) {
+  const url = e.senderFrame?.url || '';
+  return url.startsWith('file://') || (DEV_URL && url.startsWith(DEV_URL));
+}
+const handle = (channel, fn) => ipcMain.handle(channel, async (e, payload) => {
+  if (!trustedSender(e)) throw new Error('blocked');
+  return fn(payload && typeof payload === 'object' ? payload : {});
+});
+const listen = (channel, fn) => ipcMain.on(channel, (e, payload) => {
+  if (trustedSender(e)) fn(payload && typeof payload === 'object' ? payload : {});
+});
+
+// auth replies tell us whether the profile is unlocked
+async function authCall(cmd, args) {
+  const st = await engine.request(cmd, args, 30000);
+  unlocked = !!st.unlocked;
+  if (!unlocked) setPreview(false);
+  buildTrayMenu();
+  return st;
+}
 
 function registerIpc() {
   // Channels from the SDS API design
@@ -260,20 +311,29 @@ function registerIpc() {
     applyLoginItem();
     return settings;
   });
-  ipcMain.on('ipc-trigger-alert', (_e, p) => showNotification({ title: 'DeskHealth AI', message: p.msg, notify: true }));
+  listen('ipc-trigger-alert', (p) => showNotification({ title: 'DeskHealth AI', message: String(p.msg || ''), notify: true }));
   handle('ipc-camera-hardware', () => engine.request('list_cameras', {}, 30000));
-  ipcMain.on('ipc-camera-pause', (_e, p) => engine.send('pause', { reason: p?.reason || 'user' }));
-  ipcMain.on('ipc-camera-resume', (_e, p) => engine.send('resume', p?.reason ? { reason: p.reason } : {}));
+  listen('ipc-camera-pause', () => engine.send('pause', { reason: 'user' }));
+  listen('ipc-camera-resume', () => engine.send('resume', {}));
+
+  // Security layer: profile password (checked in the Python engine)
+  handle('ipc-auth-status', () => engine.request('auth_status').then((st) => { unlocked = !!st.unlocked; return st; }));
+  handle('ipc-auth-setup', (p) => authCall('auth_setup', { name: String(p.name || ''), password: String(p.password || '') }));
+  handle('ipc-auth-login', (p) => authCall('auth_login', { password: String(p.password || '') }));
+  handle('ipc-auth-lock', () => authCall('auth_lock', {}));
+  handle('ipc-auth-change', (p) => authCall('auth_change', { old: String(p.old || ''), new: String(p.new || '') }));
+  handle('ipc-auth-reset', (p) => authCall('auth_reset', { confirm: String(p.confirm || '') }));
 
   // Additional channels
   handle('ipc-get-settings', () => engine.request('get_settings'));
   handle('ipc-get-prefs', () => prefs);
   handle('ipc-set-prefs', (p) => {
     if (['ask', 'tray', 'quit'].includes(p.closeAction)) prefs.closeAction = p.closeAction;
+    if ([0, 1, 5, 15, 30].includes(p.autoLockMinutes)) prefs.autoLockMinutes = p.autoLockMinutes;
     savePrefs();
     return prefs;
   });
-  ipcMain.on('ipc-quit', () => quitApp());
+  listen('ipc-quit', () => quitApp());
   handle('ipc-reset-settings', async () => {
     settings = await engine.request('reset_settings');
     applyAutoPause();
@@ -284,7 +344,7 @@ function registerIpc() {
   handle('ipc-calibrate', (p) => engine.request('calibrate', p));
   handle('ipc-clear-calibration', () => engine.request('clear_calibration'));
   handle('ipc-snooze', (p) => (p.minutes ? snooze(p.minutes) : engine.send('unsnooze')));
-  ipcMain.on('ipc-set-preview', (_e, p) => setPreview(!!p?.enabled));
+  listen('ipc-set-preview', (p) => setPreview(!!p.enabled && unlocked));
   handle('ipc-clear-history', () => engine.request('clear_history'));
   handle('ipc-export-csv', async () => {
     const res = await dialog.showSaveDialog(win, {
@@ -302,6 +362,8 @@ app.on('second-instance', () => showWindow());
 
 app.whenReady().then(() => {
   loadPrefs();
+  // the page may use the camera list (device names) - nothing else
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'media'));
   registerIpc();
   startEngine();
   createWindow();

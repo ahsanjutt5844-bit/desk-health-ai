@@ -61,7 +61,7 @@ body {
   .label { @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-mute-400; }
   .card-title { @apply font-display text-[13px] font-bold uppercase tracking-[0.14em] text-good; }
   .btn { @apply inline-flex items-center gap-2 rounded-xl border border-ink-600 bg-ink-800 px-4 py-2 text-sm font-medium text-mute-200 transition hover:border-ink-500 hover:bg-ink-700 disabled:opacity-40; }
-  .btn-primary { @apply border-good bg-good text-white hover:brightness-110; }
+  .btn-primary { @apply border-good bg-good text-white hover:brightness-110 disabled:border-ink-600 disabled:bg-ink-700 disabled:text-mute-400 disabled:opacity-100; }
   :root.dark .btn-primary { @apply border-good/40 bg-good/15 text-good hover:bg-good/25 hover:border-good/60; }
   .btn-danger { @apply border-bad/40 bg-bad/10 text-bad hover:bg-bad/20; }
 }
