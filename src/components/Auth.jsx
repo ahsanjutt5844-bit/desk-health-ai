@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { bridge } from '../lib/engine.jsx';
+import { bridge, useEngine } from '../lib/engine.jsx';
 
 // Security layer: the dashboard, history, settings and camera preview are
 // only shown after the profile password is entered. The password is checked
@@ -148,6 +148,12 @@ function LoginScreen({ status, onDone }) {
 
 export function AuthGate({ children }) {
   const [status, setStatus] = useState(null);
+  const { setSettings } = useEngine();
+  const unlocked = !!status?.unlocked;
+  // settings can only be read once unlocked (and change after a reset)
+  useEffect(() => {
+    if (unlocked) bridge.getSettings().then(setSettings).catch(() => {});
+  }, [unlocked]); // eslint-disable-line react-hooks/exhaustive-deps
   const refresh = useCallback(() => {
     bridge.authStatus().then(setStatus).catch(() => setTimeout(refresh, 1000)); // engine still starting
   }, []);

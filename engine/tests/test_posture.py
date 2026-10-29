@@ -250,6 +250,34 @@ def test_snooze_blocks_alerts():
     assert n.evaluate_posture_state("Slouching", True, now) == []
 
 
+def test_notifier_lost_frame_does_not_restart_streak():
+    # one frame without a detected person (Away) in the middle of a 3 min slouch
+    n = NotificationManager(alert_threshold_mins=3)
+    alerts = []
+    for t in range(200):
+        alerts += n.evaluate_posture_state("Away" if t == 100 else "Slouching", False, t)
+    assert len(alerts) == 1
+
+
+def test_notifier_resting_resets_after_grace():
+    n = NotificationManager(alert_threshold_mins=3)
+    n.evaluate_posture_state("Slouching", False, 0)
+    n.evaluate_posture_state("Resting", False, 4)
+    assert n.slouch_start == 0                           # brief lean back
+    assert n.evaluate_posture_state("Resting", False, 300) == []   # no alert while resting
+    assert n.slouch_start is None
+
+
+def test_resting_does_not_flicker_at_the_boundary():
+    a = analyzer()
+    assert a.analyze(Features.from_observation(body(trunk_lean=-20))).state == "Resting"
+    # coming slightly forward again (just under 12 cm back) stays Resting
+    assert a.analyze(Features.from_observation(body(trunk_lean=-15))).state == "Resting"
+    # sitting up properly ends it
+    assert a.analyze(Features.from_observation(body())).state == "Healthy"
+    assert analyzer().analyze(Features.from_observation(body(trunk_lean=-15))).state != "Resting"
+
+
 if __name__ == "__main__":
     import inspect
     for name, fn in list(globals().items()):

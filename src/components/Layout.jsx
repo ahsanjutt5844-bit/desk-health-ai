@@ -52,7 +52,7 @@ export function Sidebar({ page, setPage }) {
           <div className="truncate text-sm font-semibold text-mute-200" title="Signed-in profile">👤 {auth?.status?.profile_name || 'Main User'}</div>
           <button className="mt-0.5 text-xs font-semibold text-mute-400 hover:text-good" onClick={() => auth?.lock()} title="Lock the dashboard; tracking continues">🔒 Lock</button>
           <div className="mt-1 text-sm font-semibold text-mute-200">UCP — S26CS034</div>
-          <div className="mt-0.5 font-mono text-[10px] text-mute-400">v0.6.0 · BSCS FYP{bridge.isMock ? ' · demo data' : ''}</div>
+          <div className="mt-0.5 font-mono text-[10px] text-mute-400">v0.6.1 · BSCS FYP{bridge.isMock ? ' · demo data' : ''}</div>
         </div>
         <button
           className="rounded-lg px-2 py-1 text-xs font-semibold text-mute-400 transition hover:bg-bad/10 hover:text-bad"

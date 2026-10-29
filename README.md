@@ -45,8 +45,9 @@ explains (plus some hip slide, as people slide forward on the seat when they lea
 the chair (sinking down without really leaning back) is **Slouching**.
 
 **Alerts use continuous slouching:** with the alert timer at 3 min, a posture notification appears only
-after 3 minutes of slouching *in a row*. Sitting properly resets the timer; corrections shorter than 8 s
-are ignored so that camera flicker cannot reset it. Separate slouches are never added up for the alert.
+after 3 minutes of slouching *in a row*. Sitting properly, resting or leaving the desk resets the timer;
+interruptions shorter than 8 s (a quick correction, a lost camera frame) are ignored so that camera
+flicker cannot reset it. Separate slouches are never added up for the alert.
 The dashboard shows both the current continuous slouch and the total slouch time of the day.
 Slumping back (shoulders drop while moving away from the screen) is **Slouching**.
 
@@ -147,9 +148,11 @@ npm start
 ```powershell
 engine\.venv\Scripts\python -m pytest engine\tests -q
 ```
-13 tests simulate a 3-D seated body projected through a pinhole camera. They cover: upright → Healthy,
-shoulders down + forward → Slouching, neck-only → still Healthy, leaning back → Resting, sliding down →
-pelvic component, plus the alert timers, too-close cooldown and snooze.
+40 tests. The posture tests simulate a 3-D seated body projected through a pinhole camera: upright →
+Healthy, shoulders down or forward → Slouching, neck-only → still Healthy, reclining to rest → Resting,
+slumping → Slouching, sliding down → pelvic component. Others cover the continuous alert timer (a lost
+camera frame or a short correction does not restart it), too-close cooldown, snooze, the password
+layer (hashing, lock-out, reset) and camera recovery.
 
 ### UI-only preview in a browser
 `npx vite` → open http://localhost:5173. Without Electron, a mock bridge streams demo data.

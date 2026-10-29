@@ -35,9 +35,9 @@ function savePrefs() {
   try { fs.writeFileSync(PREFS_FILE(), JSON.stringify(prefs, null, 2)); } catch { /* ignore */ }
 }
 
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-}
+// a second copy only brings the running window to the front (one engine, one camera)
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.exit(0);
 app.setAppUserModelId('pk.edu.ucp.deskhealthai'); // needed for Windows toasts
 
 // ------------------------------------------------------------------ window
@@ -94,7 +94,8 @@ function createWindow() {
     else hideToTray();
   });
   // Minimise works normally (taskbar button); tracking continues
-  win.on('minimize', () => setPreview(false));
+  win.on('minimize', () => { setPreview(false); scheduleAutoLock(); });
+  win.on('restore', cancelAutoLock);
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
@@ -361,6 +362,7 @@ function registerIpc() {
 app.on('second-instance', () => showWindow());
 
 app.whenReady().then(() => {
+  if (!gotLock) return;
   loadPrefs();
   // the page may use the camera list (device names) - nothing else
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'media'));

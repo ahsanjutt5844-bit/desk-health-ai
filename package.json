@@ -1,7 +1,7 @@
 {
   "name": "desk-health-ai",
   "productName": "DeskHealth AI",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Posture (slouching) & eye strain monitor - BSCS FYP S26CS034, University of Central Punjab",
   "main": "electron/main.js",
   "type": "commonjs",

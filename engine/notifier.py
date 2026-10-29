@@ -2,12 +2,13 @@
 NotificationManager - timer & threshold logic that prevents "alert fatigue".
 
 * Posture alert : only after the user has slouched CONTINUOUSLY for
-                  `alert_threshold_mins` (default 3). Short corrections of a few
-                  seconds do not reset the timer, sitting properly does.
+                  `alert_threshold_mins` (default 3). Short interruptions of a few
+                  seconds (a correction, a lost camera frame) do not reset the
+                  timer; sitting properly, resting or leaving for longer does.
 * Distance alert: when the face stays closer than the minimum distance for
                   `too_close_seconds`, the user is asked to move back.
                   Repeats at most every `distance_cooldown_s` seconds.
-* Resting / Away: timers are paused and reset.
+* Resting / Away: the slouch timer is reset after the same grace period.
 * Snooze        : all alerts suppressed until the snooze ends.
 """
 
@@ -61,19 +62,18 @@ class NotificationManager:
         alerts: list[dict] = []
 
         # ---- posture ----
+        # The streak ends only after POSTURE_GRACE_S without slouching, so a
+        # short correction, one lost camera frame (Away) or a brief lean back
+        # (Resting) does not restart a nearly finished timer.
         if state == "Slouching":
             if self.slouch_start is None:
                 self.slouch_start = now
             self.last_slouch_seen = now
-        elif state == "Healthy":
-            if self.last_slouch_seen and now - self.last_slouch_seen > self.POSTURE_GRACE_S:
-                self.slouch_start = None
-                self.last_slouch_seen = None
-        else:  # Resting / Away
+        elif self.last_slouch_seen is not None and now - self.last_slouch_seen > self.POSTURE_GRACE_S:
             self.slouch_start = None
             self.last_slouch_seen = None
 
-        if self.slouch_start is not None:
+        if self.slouch_start is not None and state == "Slouching":
             duration = now - self.slouch_start
             if duration >= self.alert_threshold_mins * 60:
                 if not self.is_snoozed:

@@ -71,6 +71,10 @@ RECLINE_MIN_BACK_CM = 12.0
 # the drop the recline itself causes (people slide their hips forward a bit
 # when they lean back to rest).
 RECLINE_SLIDE_ALLOWANCE = 0.35
+# Once resting, stay resting until clearly upright or slumping again, so the
+# state does not flicker at the boundary.
+RECLINE_STAY_BACK_CM = 9.0
+RECLINE_STAY_ALLOWANCE = 0.45
 
 
 def clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -239,9 +243,11 @@ class PostureAnalyzer:
         self.baseline = baseline
         self.threshold = threshold
         self._slouching = False
+        self._resting = False
 
     def reset(self):
         self._slouching = False
+        self._resting = False
 
     def analyze(self, f: Features) -> PostureResult:
         b = self.baseline
@@ -332,11 +338,15 @@ class PostureAnalyzer:
         # hip slide. Slumping into the chair moves them back much less while
         # they drop a lot - that stays slouching.
         excess_drop_cm = max(0.0, drop_ratio) * AVG_SHOULDER_WIDTH_CM
-        resting = (back_cm >= RECLINE_MIN_BACK_CM
-                   and excess_drop_cm <= RECLINE_SLIDE_ALLOWANCE * back_cm
+        min_back, allowance, face_back = (
+            (RECLINE_STAY_BACK_CM, RECLINE_STAY_ALLOWANCE, 1.07) if self._resting
+            else (RECLINE_MIN_BACK_CM, RECLINE_SLIDE_ALLOWANCE, 1.10))
+        resting = (back_cm >= min_back
+                   and excess_drop_cm <= allowance * back_cm
                    and forward_head < 0.6)
         if resting and b.distance_cm and f.distance_cm:
-            resting = f.distance_cm >= b.distance_cm * 1.10   # the face moved back too
+            resting = f.distance_cm >= b.distance_cm * face_back   # the face moved back too
+        self._resting = resting
 
         # ---- Classification ----------------------------------------------
         # Shoulders down or forward = slouching (the shoulder component alone

@@ -93,8 +93,8 @@ function SlouchTimer({ status, alertMins }) {
   return (
     <div className="mt-3 rounded-xl border border-ink-700 bg-ink-900 px-3 py-2.5">
       <div className="flex items-baseline justify-between text-xs">
-        <span className="text-mute-300">Continuous slouching</span>
-        <span className={`font-mono font-bold ${streak ? 'text-bad' : 'text-mute-400'}`}>{mmss(streak)} <span className="font-normal text-mute-400">/ {alertMins} min</span></span>
+        <span className="whitespace-nowrap text-mute-300">Continuous slouching</span>
+        <span className={`whitespace-nowrap font-mono font-bold ${streak ? 'text-bad' : 'text-mute-400'}`}>{mmss(streak)} <span className="font-normal text-mute-400">/ {alertMins} min</span></span>
       </div>
       <div className="mt-1.5"><Bar value={streak / limit} color="bg-bad" /></div>
       <div className="mt-2 flex items-baseline justify-between text-xs">
