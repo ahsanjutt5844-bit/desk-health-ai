@@ -22,19 +22,31 @@ package "Presentation & Desktop Shell (JavaScript)" {
     + renderPostureCharts(stats : Object) : void
     + updateSettings(values : Object) : Promise
     + calibrate(knownDistanceCm : Number) : Promise
+    + login(password : String) : Promise
+    + lock() : Promise
     + quit() : void
   }
   class ElectronMain <<module>> {
     - win : BrowserWindow
     - tray : Tray
     - prefs : Object
+    - unlocked : Boolean
     + createWindow() : void
     + hideToTray() : void
+    + scheduleAutoLock() : void
+    + lockProfile() : Promise
     + quitApp() : void
     + showNotification(alert : Object) : void
     + registerIpc() : void
   }
   class EventEmitter <<Node.js>>
+  class CallDetector {
+    - intervalMs : Number
+    - active : Boolean
+    + start() : void
+    + stop() : void
+    + check() : Promise
+  }
   class EngineBridge {
     - proc : ChildProcess
     - pending : Map
@@ -42,13 +54,6 @@ package "Presentation & Desktop Shell (JavaScript)" {
     + send(cmd : String, args : Object) : void
     + request(cmd : String, args : Object) : Promise
     + stop(timeoutMs : Number) : Promise
-  }
-  class CallDetector {
-    - intervalMs : Number
-    - active : Boolean
-    + start() : void
-    + stop() : void
-    + check() : Promise
   }
 }
 
@@ -112,6 +117,7 @@ package "AI Processing Engine (Python)" {
   class PostureAnalyzer {
     + threshold : float
     - slouching : bool
+    - resting : bool
     + analyze(f : Features) : PostureResult
     + reset() : void
   }
@@ -130,6 +136,7 @@ package "AI Processing Engine (Python)" {
     + too_close_seconds : float
     + snoozed_until : float
     + evaluate_posture_state(state : str, too_close : bool) : list
+    + slouch_seconds() : float
     + snooze(minutes : float) : void
     + reset_timer() : void
   }
@@ -143,11 +150,26 @@ package "AI Processing Engine (Python)" {
     + save_alert(session_id : int, alert_type : str, duration : int) : int
     + get_stats(date_range : str) : dict
     + export_csv(path : str) : int
+    + get_auth() : dict
+    + set_auth(name : str, salt : str, digest : str, iterations : int) : void
+  }
+  class AuthManager {
+    + unlocked : bool
+    - failures : int
+    - locked_until : float
+    + status() : dict
+    + setup(name : str, password : str) : dict
+    + login(password : str) : dict
+    + lock() : dict
+    + change(old : str, new : str) : dict
+    + require_unlocked() : void
+    + reset_everything() : dict
   }
 }
 
-EventEmitter <|-- EngineBridge
-EventEmitter <|-- CallDetector
+CallDetector --|> EventEmitter
+EngineBridge --|> EventEmitter
+EventEmitter -[hidden]down- Engine
 
 ElectronMain "1" *-- "1" EngineBridge : spawns >
 ElectronMain "1" *-- "0..1" CallDetector : uses >
@@ -155,6 +177,8 @@ ReactDashboard ..> ElectronMain : <<IPC>>
 EngineBridge ..> Engine : <<stdin/stdout JSON>>
 
 Engine "1" *-- "1" DatabaseManager
+Engine "1" *-- "1" AuthManager
+AuthManager "1" --> "1" DatabaseManager : db >
 Engine "1" *-- "1" NotificationManager
 Engine "1" *-- "1" FeatureSmoother
 Engine "1" *-- "0..1" AIVisionEngine

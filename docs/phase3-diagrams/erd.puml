@@ -20,6 +20,9 @@ entity "USER_PROFILE" as P {
   --
   * profile_name : VARCHAR
   * created_at : DATETIME
+  password_hash : TEXT
+  password_salt : TEXT
+  password_iter : INTEGER
 }
 entity "USER_SETTINGS" as S {
   * <u>setting_id</u> : INTEGER <<PK>>
